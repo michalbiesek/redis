@@ -24,6 +24,7 @@ src/nodes.conf
 deps/lua/src/lua
 deps/lua/src/luac
 deps/lua/src/liblua.a
+deps/memkind
 .make-*
 .prerequisites
 *.dSYM
