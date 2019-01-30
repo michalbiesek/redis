@@ -45,6 +45,7 @@
 
 #include "dict.h"
 #include "zmalloc.h"
+#include "alloc.h"
 #ifndef DICT_BENCHMARK_MAIN
 #include "redisassert.h"
 #else
