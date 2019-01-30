@@ -359,7 +359,7 @@ void incrDecrCommand(client *c, long long incr) {
         new = o;
         o->ptr = (void*)((long)value);
     } else {
-        new = createStringObjectFromLongLongForValue(value);
+        new = createStringObjectFromLongLongForValueM(value);
         if (o) {
             dbOverwrite(c->db,c->argv[1],new);
         } else {
@@ -411,7 +411,7 @@ void incrbyfloatCommand(client *c) {
         addReplyError(c,"increment would produce NaN or Infinity");
         return;
     }
-    new = createStringObjectFromLongDouble(value,1);
+    new = createStringObjectFromLongDoubleM(value,1);
     if (o)
         dbOverwrite(c->db,c->argv[1],new);
     else
