@@ -45,6 +45,10 @@ void zlibc_free(void *ptr) {
 #include "config.h"
 #include "zmalloc.h"
 #include "atomicvar.h"
+#include "alloc.h"
+#ifdef defined(USE_MEMKIND)
+
+#endif
 
 #ifdef HAVE_MALLOC_SIZE
 #define PREFIX_SIZE (0)
@@ -95,7 +99,7 @@ static void zmalloc_default_oom(size_t size) {
 
 static void (*zmalloc_oom_handler)(size_t) = zmalloc_default_oom;
 
-void *zmalloc(size_t size) {
+void *zmalloc_static(size_t size) {
     void *ptr = malloc(size+PREFIX_SIZE);
 
     if (!ptr) zmalloc_oom_handler(size);
@@ -107,6 +111,15 @@ void *zmalloc(size_t size) {
     update_zmalloc_stat_alloc(size+PREFIX_SIZE);
     return (char*)ptr+PREFIX_SIZE;
 #endif
+}
+
+void * zmalloc (size_t size)
+{
+    fprintf(stderr,"\nzmalloc_pmem_info_wrapper");
+    void* ptr = zmalloc_static(size + MEMKIND_PREFIX_SIZE);
+    uint64_t *is_pmem = ptr;
+    is_pmem = 0;
+    return (char*)ptr + MEMKIND_PREFIX_SIZE;
 }
 
 /* Allocation and free functions that bypass the thread cache
@@ -187,7 +200,7 @@ size_t zmalloc_usable(void *ptr) {
 }
 #endif
 
-void zfree(void *ptr) {
+static void zfree_pmem_info_wrapper(void *ptr) {
 #ifndef HAVE_MALLOC_SIZE
     void *realptr;
     size_t oldsize;
@@ -204,6 +217,18 @@ void zfree(void *ptr) {
     free(realptr);
 #endif
 }
+
+void zfree (void* ptr)
+{
+    fprintf(stderr,"\nfree_pmem_info_wrapper");
+    uint64_t *is_pmem = (char*)ptr - MEMKIND_PREFIX_SIZE;
+    if(*is_pmem) {
+        mfree(is_pmem);
+    }else {
+        zfree_pmem_info_wrapper(is_pmem);
+    }
+}
+
 
 char *zstrdup(const char *s) {
     size_t l = strlen(s)+1;

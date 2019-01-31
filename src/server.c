@@ -1633,7 +1633,7 @@ void initServerConfig(void) {
     server.lua_time_limit = LUA_SCRIPT_TIME_LIMIT;
 
     server.pm_dir_path = NULL;
-    server.pm_file_size = 1024 * 1024 * 16;
+    server.pm_file_size = 0;
     server.use_volatile = true;
     server.keys_on_pm = true;
 
