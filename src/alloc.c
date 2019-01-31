@@ -43,3 +43,9 @@ int allocCompare(alloc lhs, alloc rhs) {
     }
     return -1;
 }
+
+
+void mysuper_free(void * ptr)
+{
+    mfree(ptr);
+}

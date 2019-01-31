@@ -61,7 +61,7 @@ typedef const struct __alloc *alloc;
 
 static void * zmalloc_pmem_info_wrapper (size_t size)
 {
-    fprintf(stderr,"\nzmalloc_pmem_info_wrapper");
+//    fprintf(stderr,"\nzmalloc_pmem_info_wrapper");
     void* ptr = zmalloc(size + MEMKIND_PREFIX_SIZE);
     uint64_t *is_pmem = ptr;
     is_pmem = 0;
@@ -70,7 +70,7 @@ static void * zmalloc_pmem_info_wrapper (size_t size)
 
 static void * mmalloc_pmem_info_wrapper (size_t size)
 {
-    fprintf(stderr,"\nmmalloc_pmem_info_wrapper");
+//    fprintf(stderr,"\nmmalloc_pmem_info_wrapper");
     void* ptr = mmalloc(size + MEMKIND_PREFIX_SIZE);
     uint64_t *is_pmem = ptr;
     is_pmem = 1;
@@ -94,7 +94,7 @@ static void * mcalloc_pmem_info_wrapper (size_t size)
 
 static void * zrealloc_pmem_info_wrapper (void *ptr, size_t size)
 {
-    fprintf(stderr,"\nzrealloc_pmem_info_wrapper");
+//    fprintf(stderr,"\nzrealloc_pmem_info_wrapper");
     void* ptr_new = zrealloc(ptr,size + MEMKIND_PREFIX_SIZE);
     uint64_t *is_pmem = ptr_new;
     is_pmem = 1;
@@ -103,7 +103,7 @@ static void * zrealloc_pmem_info_wrapper (void *ptr, size_t size)
 
 static void * mrealloc_pmem_info_wrapper (void *ptr, size_t size)
 {
-    fprintf(stderr,"\nmrealloc_pmem_info_wrapper");
+//    fprintf(stderr,"\nmrealloc_pmem_info_wrapper");
     void* ptr_new = mrealloc(ptr,size + MEMKIND_PREFIX_SIZE);
     uint64_t *is_pmem = ptr_new;
     is_pmem = 0;
@@ -112,7 +112,7 @@ static void * mrealloc_pmem_info_wrapper (void *ptr, size_t size)
 
 static void free_pmem_info_wrapper (void* ptr)
 {
-    fprintf(stderr,"\nfree_pmem_info_wrapper");
+//    fprintf(stderr,"\nfree_pmem_info_wrapper");
     uint64_t *is_pmem = (char*)ptr - MEMKIND_PREFIX_SIZE;
     if(*is_pmem) {
         mfree(is_pmem);
@@ -123,7 +123,7 @@ static void free_pmem_info_wrapper (void* ptr)
 
 static void free_no_tcache_pmem_info_wrapper (void* ptr)
 {
-    fprintf(stderr,"\nfree_no_tcache_pmem_info_wrapper");
+//    fprintf(stderr,"\nfree_no_tcache_pmem_info_wrapper");
     uint64_t *is_pmem = (char*)ptr - MEMKIND_PREFIX_SIZE;
     if(*is_pmem) {
         mfree(is_pmem);
@@ -169,5 +169,5 @@ static const struct __alloc __m_alloc = {
 static const struct __alloc *m_alloc = &__m_alloc;
 
 int allocCompare(alloc lhs, alloc rhs);
-
+void mysuper_free(void * ptr);
 #endif /* __ALLOC_H__ */

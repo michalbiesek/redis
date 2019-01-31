@@ -46,9 +46,7 @@ void zlibc_free(void *ptr) {
 #include "zmalloc.h"
 #include "atomicvar.h"
 #include "alloc.h"
-#ifdef defined(USE_MEMKIND)
-
-#endif
+#define MEMKIND_PREFIX_SIZE 8
 
 #ifdef HAVE_MALLOC_SIZE
 #define PREFIX_SIZE (0)
@@ -223,7 +221,8 @@ void zfree (void* ptr)
     fprintf(stderr,"\nfree_pmem_info_wrapper");
     uint64_t *is_pmem = (char*)ptr - MEMKIND_PREFIX_SIZE;
     if(*is_pmem) {
-        mfree(is_pmem);
+        mysuper_free(is_pmem);
+//        m_alloc->free(is_pmem);
     }else {
         zfree_pmem_info_wrapper(is_pmem);
     }
