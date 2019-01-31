@@ -42,6 +42,7 @@ MEMKIND_EXPORT struct memkind_ops MEMKIND_PMEM_OPS = {
     .posix_memalign = memkind_arena_posix_memalign,
     .realloc = memkind_arena_realloc,
     .free = memkind_arena_free,
+    .ispmem = memkind_arena_is_pmem,
     .mmap = memkind_pmem_mmap,
     .get_mmap_flags = memkind_pmem_get_mmap_flags,
     .get_arena = memkind_thread_get_arena,

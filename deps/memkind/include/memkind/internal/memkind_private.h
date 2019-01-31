@@ -101,6 +101,7 @@ struct memkind_ops {
     void (* init_once)(void);
     int (* finalize)(struct memkind *kind);
     size_t (* malloc_usable_size)(struct memkind *kind, void *addr);
+    int (* ispmem) (struct memkind * kind, void *ptr);
 };
 
 struct memkind {

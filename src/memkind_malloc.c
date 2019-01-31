@@ -52,9 +52,13 @@ void *memkind_realloc_wrapper(void *ptr, size_t size) {
     }
     return newptr;
 }
+int memkind_is_pmem_wrapper(void *ptr) {
+    return memkind_is_pmem(server.pmem_kind1 ,ptr);
+}
 
 void memkind_free_wrapper(void *ptr) {
     if(!ptr) return;
+    memkind_is_pmem_wrapper(ptr);
     size_t oldsize = memkind_malloc_usable_size(server.pmem_kind1 ,ptr);
     update_memkind_malloc_stat_free(oldsize);
     memkind_free(server.pmem_kind1, ptr);

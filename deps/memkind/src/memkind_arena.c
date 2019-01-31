@@ -493,6 +493,27 @@ MEMKIND_EXPORT void *memkind_arena_malloc(struct memkind *kind, size_t size)
     return result;
 }
 
+MEMKIND_EXPORT int memkind_arena_is_pmem (struct memkind *kind, void *ptr)
+{
+    struct memkind *kind_temp = NULL;
+    unsigned int arena;
+    int err = memkind_lookup_arena(ptr, &arena);
+    if (MEMKIND_LIKELY(!err)) {
+        kind_temp = get_kind_by_arena(arena);
+    }
+    if (kind_temp->partition == kind->partition)
+    {
+        fprintf(stderr,"\nKIND IS PMEM");
+      //  exit(1);
+        return 0;
+    }
+    else {
+        fprintf(stderr,"\nKIND IS NOT PMEM");
+     //   return -1;
+        exit(1);
+    }
+}
+
 MEMKIND_EXPORT void memkind_arena_free(struct memkind *kind, void *ptr)
 {
     if (!kind && ptr != NULL) {
@@ -502,6 +523,19 @@ MEMKIND_EXPORT void memkind_arena_free(struct memkind *kind, void *ptr)
             kind = get_kind_by_arena(arena);
         }
     }
+
+//    if (1)
+//    {
+//    struct memkind *kind_temp = NULL;
+//    unsigned int arena;
+//    int err = memkind_lookup_arena(ptr, &arena);
+//    if (MEMKIND_LIKELY(!err)) {
+//        kind_temp = get_kind_by_arena(arena);
+//    }
+//    if(kind_temp != )
+//    }
+
+    //END OF TEST
 
     if (!kind) {
         jemk_free(ptr);

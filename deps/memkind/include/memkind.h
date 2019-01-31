@@ -315,6 +315,7 @@ void *memkind_realloc(memkind_t kind, void *ptr, size_t size);
 ///
 void memkind_free(memkind_t kind, void *ptr);
 
+int memkind_is_pmem (memkind_t kind, void *ptr);
 #ifdef __cplusplus
 }
 #endif

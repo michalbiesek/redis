@@ -658,6 +658,11 @@ MEMKIND_EXPORT void *memkind_realloc(struct memkind *kind, void *ptr,
     return result;
 }
 
+MEMKIND_EXPORT int memkind_is_pmem (memkind_t kind, void *ptr)
+{
+    return kind->ops->ispmem(kind, ptr);
+}
+
 MEMKIND_EXPORT void memkind_free(struct memkind *kind, void *ptr)
 {
 #ifdef MEMKIND_DECORATION_ENABLED
