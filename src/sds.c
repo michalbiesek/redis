@@ -38,6 +38,7 @@
 #include <limits.h>
 #include "sds.h"
 #include "sdsalloc.h"
+#include "alloc.h"
 
 const char *SDS_NOINIT = "SDS_NOINIT";
 
@@ -153,8 +154,7 @@ sds sdsnewlenPM(const void *init, size_t initlen) {
     if (type == SDS_TYPE_5 && initlen == 0) type = SDS_TYPE_8;
     int hdrlen = sdsHdrSize(type);
     unsigned char *fp; /* flags pointer. */
-
-    sh = mmalloc(hdrlen+initlen+1);
+    sh = m_alloc->alloc(hdrlen+initlen+1);
     if (init==SDS_NOINIT)
         init = NULL;
     else if (!init)

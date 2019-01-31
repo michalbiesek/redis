@@ -33,6 +33,8 @@
 #include "zmalloc.h"
 #include "memkind_malloc.h"
 
+#define MEMKIND_PREFIX_SIZE 8
+
 /* Typedefs for user data allocator */
 typedef void *(*ualloc)(size_t size);
 typedef void *(*ucalloc)(size_t size);
@@ -56,14 +58,89 @@ struct __alloc {
 };
 typedef const struct __alloc *alloc;
 
+static void * zmalloc_pmem_info_wrapper (size_t size)
+{
+    void* ptr = zmalloc(size + MEMKIND_PREFIX_SIZE);
+    uint64_t *is_pmem = ptr;
+    is_pmem = 0;
+    return (char*)ptr + MEMKIND_PREFIX_SIZE;
+}
+
+static void * mmalloc_pmem_info_wrapper (size_t size)
+{
+    void* ptr = mmalloc(size + MEMKIND_PREFIX_SIZE);
+    uint64_t *is_pmem = ptr;
+    is_pmem = 1;
+    return (char*)ptr + MEMKIND_PREFIX_SIZE;
+}
+
+static void * zcalloc_pmem_info_wrapper (size_t size)
+{
+    void* ptr = zcalloc(size + MEMKIND_PREFIX_SIZE);
+    uint64_t *is_pmem = ptr;
+    return (char*)ptr + MEMKIND_PREFIX_SIZE;
+}
+
+static void * mcalloc_pmem_info_wrapper (size_t size)
+{
+    void* ptr = mcalloc(size + MEMKIND_PREFIX_SIZE);
+    uint64_t *is_pmem = ptr;
+    is_pmem = 1;
+    return (char*)ptr + MEMKIND_PREFIX_SIZE;
+}
+
+static void * zrealloc_pmem_info_wrapper (void *ptr, size_t size)
+{
+    void* ptr_new = zrealloc(ptr,size + MEMKIND_PREFIX_SIZE);
+    uint64_t *is_pmem = ptr_new;
+    is_pmem = 1;
+    return (char*)ptr_new + MEMKIND_PREFIX_SIZE;
+}
+
+static void * mrealloc_pmem_info_wrapper (void *ptr, size_t size)
+{
+    void* ptr_new = mrealloc(ptr,size + MEMKIND_PREFIX_SIZE);
+    uint64_t *is_pmem = ptr_new;
+    is_pmem = 0;
+    return (char*)ptr_new + MEMKIND_PREFIX_SIZE;
+}
+
+static void free_pmem_info_wrapper (void* ptr)
+{
+    uint64_t *is_pmem = (char*)ptr - MEMKIND_PREFIX_SIZE;
+    if(*is_pmem) {
+        mfree(is_pmem);
+    }else {
+        zfree(is_pmem);
+    }
+}
+
+static void free_no_tcache_pmem_info_wrapper (void* ptr)
+{
+    uint64_t *is_pmem = (char*)ptr - MEMKIND_PREFIX_SIZE;
+    if(*is_pmem) {
+        mfree(is_pmem);
+    }else {
+        zfree_no_tcache(is_pmem);
+    }
+}
+
+static void zmalloc_no_tcache_pmem_info_wrapper (size_t size)
+{
+    void* ptr = zmalloc_no_tcache(size + MEMKIND_PREFIX_SIZE);
+    uint64_t *is_pmem = ptr;
+    is_pmem = 0;
+    return (char*)ptr + MEMKIND_PREFIX_SIZE;
+}
+
 static const struct __alloc __z_alloc = {
-    zmalloc,
-    zcalloc,
-    zrealloc,
-    zfree,
+    zmalloc_pmem_info_wrapper,
+    zcalloc_pmem_info_wrapper,
+    zrealloc_pmem_info_wrapper,
+    free_pmem_info_wrapper,
     je_malloc_usable_size, /*zmalloc_size,*/
-    zmalloc_no_tcache,
-    zfree_no_tcache,
+    zmalloc_no_tcache_pmem_info_wrapper,
+    free_no_tcache_pmem_info_wrapper,
     je_get_defrag_hint,
     zmemcpy,
     zmemset
@@ -71,13 +148,13 @@ static const struct __alloc __z_alloc = {
 static const struct __alloc *z_alloc = &__z_alloc;
 
 static const struct __alloc __m_alloc = {
-    mmalloc,
-    mcalloc,
-    mrealloc,
-    mfree,
+    mmalloc_pmem_info_wrapper,
+    mcalloc_pmem_info_wrapper,
+    mrealloc_pmem_info_wrapper,
+    free_pmem_info_wrapper,
     mmalloc_usable_size,
-    mmalloc,
-    mfree,
+    mmalloc_pmem_info_wrapper,
+    free_no_tcache_pmem_info_wrapper,
     mget_defrag_hint,
     mmemcpy,
     mmemset
