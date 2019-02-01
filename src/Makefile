@@ -152,6 +152,7 @@ ifeq ($(MALLOC),jemalloc)
 endif
 
 ifeq ($(PERSISTENT_MALLOC),memkind)
+	FINAL_CFLAGS+= -DUSE_MEMKIND
 	FINAL_LIBS+= -lpmem -lnuma
 endif
 
