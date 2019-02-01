@@ -33,7 +33,9 @@
 #include "bio.h"
 #include "latency.h"
 #include "atomicvar.h"
-
+#ifdef USE_MEMKIND
+#include "memkind_malloc.h"
+#endif
 #include <time.h>
 #include <signal.h>
 #include <sys/wait.h>
@@ -4044,6 +4046,9 @@ int main(int argc, char **argv) {
     setlocale(LC_COLLATE,"");
     tzset(); /* Populates 'timezone' global. */
     zmalloc_set_oom_handler(redisOutOfMemoryHandler);
+    #ifdef USE_MEMKIND
+    zmalloc_init_pmem_free(memkind_free_wrapper);
+    #endif
     srand(time(NULL)^getpid());
     gettimeofday(&tv,NULL);
 

@@ -45,11 +45,7 @@ void zlibc_free(void *ptr) {
 #include "config.h"
 #include "zmalloc.h"
 #include "atomicvar.h"
-#include "alloc.h"
-#ifdef defined(USE_MEMKIND)
-
-#endif
-
+#define MEMKIND_PREFIX_SIZE 8
 #ifdef HAVE_MALLOC_SIZE
 #define PREFIX_SIZE (0)
 #else
@@ -90,6 +86,15 @@ void zlibc_free(void *ptr) {
 static size_t used_memory = 0;
 pthread_mutex_t used_memory_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+
+#ifdef USE_MEMKIND
+static void (*pmem_free)(void* ptr) = NULL;
+void zmalloc_init_pmem_free(void (*_pmem_free)(void*)) {
+    fprintf(stderr,"zmalloc_init_pmem_free was called\n");
+    pmem_free = _pmem_free;
+}
+#endif
+
 static void zmalloc_default_oom(size_t size) {
     fprintf(stderr, "zmalloc: Out of memory trying to allocate %zu bytes\n",
         size);
@@ -115,11 +120,13 @@ void *zmalloc_static(size_t size) {
 
 void * zmalloc (size_t size)
 {
-    fprintf(stderr,"\nzmalloc_pmem_info_wrapper");
+    fprintf(stderr,"\nzmalloc to RAM was called");
     void* ptr = zmalloc_static(size + MEMKIND_PREFIX_SIZE);
-    uint64_t *is_pmem = ptr;
-    is_pmem = 0;
-    return (char*)ptr + MEMKIND_PREFIX_SIZE;
+    uint64_t *is_ram = ptr;
+    *is_ram = 1;
+    fprintf(stderr,"Pointer adress from zmalloc before parsing %p \n",ptr);
+    fprintf(stderr,"Pointer adress from zmalloc after parsing %p \n",(void*)((char*)ptr + MEMKIND_PREFIX_SIZE));
+    return (void*)((char*)ptr + MEMKIND_PREFIX_SIZE);
 }
 
 /* Allocation and free functions that bypass the thread cache
@@ -140,7 +147,7 @@ void zfree_no_tcache(void *ptr) {
 }
 #endif
 
-void *zcalloc(size_t size) {
+void *zcalloc_static(size_t size) {
     void *ptr = calloc(1, size+PREFIX_SIZE);
 
     if (!ptr) zmalloc_oom_handler(size);
@@ -154,7 +161,15 @@ void *zcalloc(size_t size) {
 #endif
 }
 
-void *zrealloc(void *ptr, size_t size) {
+void *zcalloc(size_t size) {
+    fprintf(stderr,"\nzcalloc was called");
+    void* ptr = zcalloc_static(size + MEMKIND_PREFIX_SIZE);
+    uint64_t *is_ram = ptr;
+    *is_ram = 1;
+    return (char*)ptr + MEMKIND_PREFIX_SIZE;
+}
+
+void *zrealloc_static(void *ptr, size_t size) {
 #ifndef HAVE_MALLOC_SIZE
     void *realptr;
 #endif
@@ -183,11 +198,27 @@ void *zrealloc(void *ptr, size_t size) {
 #endif
 }
 
+void *zrealloc(void *ptr, size_t size) {
+    void* new_ptr = NULL;
+    if (ptr) {
+        fprintf(stderr,"\nzrealloc_static was called");
+        fprintf(stderr,"Pointer adress before nzrealloc_static before parsing %p \n",ptr);
+        fprintf(stderr,"Pointer adress before nzrealloc_static after parsing %p \n",(void*)((char*)ptr - MEMKIND_PREFIX_SIZE));
+        new_ptr = zrealloc_static((void*)((char*)(ptr) - MEMKIND_PREFIX_SIZE), size + MEMKIND_PREFIX_SIZE);
+    } else {
+        new_ptr = zmalloc_static(size + MEMKIND_PREFIX_SIZE);
+    }
+    uint64_t *is_ram = new_ptr;
+    *is_ram = 1;
+    return (char*)new_ptr + MEMKIND_PREFIX_SIZE;
+}
+
 /* Provide zmalloc_size() for systems where this function is not provided by
  * malloc itself, given that in that case we store a header with this
  * information as the first bytes of every allocation. */
 #ifndef HAVE_MALLOC_SIZE
 size_t zmalloc_size(void *ptr) {
+    fprintf(stderr,"\nzmalloc_size was called");
     void *realptr = (char*)ptr-PREFIX_SIZE;
     size_t size = *((size_t*)realptr);
     /* Assume at least that all the allocations are padded at sizeof(long) by
@@ -196,11 +227,11 @@ size_t zmalloc_size(void *ptr) {
     return size+PREFIX_SIZE;
 }
 size_t zmalloc_usable(void *ptr) {
-    return zmalloc_size(ptr)-PREFIX_SIZE;
+      return zmalloc_size(ptr)-PREFIX_SIZE;
 }
 #endif
 
-static void zfree_pmem_info_wrapper(void *ptr) {
+static void zfree_static(void *ptr) {
 #ifndef HAVE_MALLOC_SIZE
     void *realptr;
     size_t oldsize;
@@ -220,12 +251,19 @@ static void zfree_pmem_info_wrapper(void *ptr) {
 
 void zfree (void* ptr)
 {
-    fprintf(stderr,"\nfree_pmem_info_wrapper");
-    uint64_t *is_pmem = (char*)ptr - MEMKIND_PREFIX_SIZE;
-    if(*is_pmem) {
-        mfree(is_pmem);
-    }else {
-        zfree_pmem_info_wrapper(is_pmem);
+    if(ptr)
+    {
+        fprintf(stderr,"\nzfree was called");
+        fprintf(stderr,"Pointer adress from zfree %p \n",ptr);
+        fprintf(stderr,"Pointer adress from zfree after prefix %p \n",(void*)((char*)(ptr) - MEMKIND_PREFIX_SIZE));
+        uint64_t *is_ram = (uint64_t*)((char*)(ptr) - MEMKIND_PREFIX_SIZE);
+        if(*is_ram) {
+            fprintf(stderr,"\nFree for RAM was called");
+            zfree_static(is_ram);
+        }else {
+            fprintf(stderr,"\nFree for PMEM was called");
+            pmem_free(is_ram);
+        }
     }
 }
 
@@ -245,9 +283,11 @@ size_t zmalloc_used_memory(void) {
 }
 
 void *zmemcpy(void* dst, const void* src, size_t num){
+    fprintf(stderr,"\nzmemcpy was called");
     return memcpy(dst, src, num);
 }
 void *zmemset(void* dst, int value, size_t num){
+    fprintf(stderr,"\nzmemset was called");
     return memset(dst, value, num);
 }
 

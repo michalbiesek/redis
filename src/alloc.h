@@ -59,109 +59,41 @@ struct __alloc {
 };
 typedef const struct __alloc *alloc;
 
-static void * zmalloc_pmem_info_wrapper (size_t size)
-{
-    fprintf(stderr,"\nzmalloc_pmem_info_wrapper");
-    void* ptr = zmalloc(size + MEMKIND_PREFIX_SIZE);
-    uint64_t *is_pmem = ptr;
-    is_pmem = 0;
-    return (char*)ptr + MEMKIND_PREFIX_SIZE;
-}
 
 static void * mmalloc_pmem_info_wrapper (size_t size)
 {
-    fprintf(stderr,"\nmmalloc_pmem_info_wrapper");
+    fprintf(stderr,"\nzMalloc to PMEM FROM ALLOC.H was called");
     void* ptr = mmalloc(size + MEMKIND_PREFIX_SIZE);
-    uint64_t *is_pmem = ptr;
-    is_pmem = 1;
-    return (char*)ptr + MEMKIND_PREFIX_SIZE;
-}
-
-static void * zcalloc_pmem_info_wrapper (size_t size)
-{
-    void* ptr = zcalloc(size + MEMKIND_PREFIX_SIZE);
-    uint64_t *is_pmem = ptr;
+    uint64_t *is_ram = ptr;
+    *is_ram = 0;
     return (char*)ptr + MEMKIND_PREFIX_SIZE;
 }
 
 static void * mcalloc_pmem_info_wrapper (size_t size)
 {
     void* ptr = mcalloc(size + MEMKIND_PREFIX_SIZE);
-    uint64_t *is_pmem = ptr;
-    is_pmem = 1;
+    uint64_t *is_ram = ptr;
+    *is_ram = 0;
     return (char*)ptr + MEMKIND_PREFIX_SIZE;
-}
-
-static void * zrealloc_pmem_info_wrapper (void *ptr, size_t size)
-{
-    fprintf(stderr,"\nzrealloc_pmem_info_wrapper");
-    void* ptr_new = zrealloc(ptr,size + MEMKIND_PREFIX_SIZE);
-    uint64_t *is_pmem = ptr_new;
-    is_pmem = 1;
-    return (char*)ptr_new + MEMKIND_PREFIX_SIZE;
 }
 
 static void * mrealloc_pmem_info_wrapper (void *ptr, size_t size)
 {
     fprintf(stderr,"\nmrealloc_pmem_info_wrapper");
     void* ptr_new = mrealloc(ptr,size + MEMKIND_PREFIX_SIZE);
-    uint64_t *is_pmem = ptr_new;
-    is_pmem = 0;
+    uint64_t *is_ram = ptr_new;
+    *is_ram = 0;
     return (char*)ptr_new + MEMKIND_PREFIX_SIZE;
 }
-
-static void free_pmem_info_wrapper (void* ptr)
-{
-    fprintf(stderr,"\nfree_pmem_info_wrapper");
-    uint64_t *is_pmem = (char*)ptr - MEMKIND_PREFIX_SIZE;
-    if(*is_pmem) {
-        mfree(is_pmem);
-    }else {
-        zfree(is_pmem);
-    }
-}
-
-static void free_no_tcache_pmem_info_wrapper (void* ptr)
-{
-    fprintf(stderr,"\nfree_no_tcache_pmem_info_wrapper");
-    uint64_t *is_pmem = (char*)ptr - MEMKIND_PREFIX_SIZE;
-    if(*is_pmem) {
-        mfree(is_pmem);
-    }else {
-        zfree_no_tcache(is_pmem);
-    }
-}
-
-static void zmalloc_no_tcache_pmem_info_wrapper (size_t size)
-{
-    void* ptr = zmalloc_no_tcache(size + MEMKIND_PREFIX_SIZE);
-    uint64_t *is_pmem = ptr;
-    is_pmem = 0;
-    return (char*)ptr + MEMKIND_PREFIX_SIZE;
-}
-
-static const struct __alloc __z_alloc = {
-    zmalloc_pmem_info_wrapper,
-    zcalloc_pmem_info_wrapper,
-    zrealloc_pmem_info_wrapper,
-    free_pmem_info_wrapper,
-    je_malloc_usable_size, /*zmalloc_size,*/
-    zmalloc_no_tcache_pmem_info_wrapper,
-    free_no_tcache_pmem_info_wrapper,
-    je_get_defrag_hint,
-    zmemcpy,
-    zmemset
-};
-static const struct __alloc *z_alloc = &__z_alloc;
 
 static const struct __alloc __m_alloc = {
     mmalloc_pmem_info_wrapper,
     mcalloc_pmem_info_wrapper,
     mrealloc_pmem_info_wrapper,
-    free_pmem_info_wrapper,
+    NULL,
     mmalloc_usable_size,
     mmalloc_pmem_info_wrapper,
-    free_no_tcache_pmem_info_wrapper,
+    NULL,
     mget_defrag_hint,
     mmemcpy,
     mmemset
