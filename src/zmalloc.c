@@ -89,7 +89,6 @@ pthread_mutex_t used_memory_mutex = PTHREAD_MUTEX_INITIALIZER;
 #ifdef USE_MEMKIND
 static void (*pmem_free)(void* ptr) = NULL;
 void zmalloc_init_pmem_free(void (*_pmem_free)(void*)) {
-    fprintf(stderr,"zmalloc_init_pmem_free was called\n");
     pmem_free = _pmem_free;
 }
 #endif
@@ -255,12 +254,12 @@ void zfree (void* ptr)
 #ifdef USE_MEMKIND
     if(ptr)
     {
-    uint64_t *is_ram = (uint64_t*)((char*)(ptr) - MEMKIND_PREFIX_SIZE);
-    if(*is_ram) {
-        zfree_local(is_ram);
-    }else {
-        pmem_free(is_ram);
-    }
+        uint64_t *is_ram = (uint64_t*)((char*)(ptr) - MEMKIND_PREFIX_SIZE);
+        if(*is_ram) {
+            zfree_local(is_ram);
+        }else {
+            pmem_free(is_ram);
+        }
     }
 #else
     zfree_local(ptr);
