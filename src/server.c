@@ -36,7 +36,6 @@
 #ifdef USE_MEMKIND
 #include "memkind_malloc.h"
 #endif
-
 #include <time.h>
 #include <signal.h>
 #include <sys/wait.h>
@@ -1634,6 +1633,11 @@ void initServerConfig(void) {
     server.lazyfree_lazy_server_del = CONFIG_DEFAULT_LAZYFREE_LAZY_SERVER_DEL;
     server.always_show_logo = CONFIG_DEFAULT_ALWAYS_SHOW_LOGO;
     server.lua_time_limit = LUA_SCRIPT_TIME_LIMIT;
+
+    server.pm_dir_path = NULL;
+    server.pm_file_size = 0;
+    server.use_volatile = true;
+    server.keys_on_pm = true;
 
     unsigned int lruclock = getLRUClock();
     atomicSet(server.lruclock,lruclock);
@@ -3737,10 +3741,10 @@ void usage(void) {
     fprintf(stderr,"       ./redis-server -h or --help\n");
     fprintf(stderr,"       ./redis-server --test-memory <megabytes>\n\n");
     fprintf(stderr,"Examples:\n");
-    fprintf(stderr,"       ./redis-server (run the server with default conf)\n");
+    fprintf(stderr,"       ./redis-server --pmdir /mnt/pmem/ 1g (run the server with default conf)\n");
     fprintf(stderr,"       ./redis-server /etc/redis/6379.conf\n");
-    fprintf(stderr,"       ./redis-server --port 7777\n");
-    fprintf(stderr,"       ./redis-server --port 7777 --replicaof 127.0.0.1 8888\n");
+    fprintf(stderr,"       ./redis-server --port 7777 --pmdir /mnt/pmem/ 1g\n");
+    fprintf(stderr,"       ./redis-server --port 7777 --replicaof 127.0.0.1 8888 --pmdir /mnt/pmem/ 1g\n");
     fprintf(stderr,"       ./redis-server /etc/myredis.conf --loglevel verbose\n\n");
     fprintf(stderr,"Sentinel mode:\n");
     fprintf(stderr,"       ./redis-server /etc/sentinel.conf --sentinel\n");
@@ -4163,6 +4167,21 @@ int main(int argc, char **argv) {
     int background = server.daemonize && !server.supervised;
     if (background) daemonize();
 
+    if (server.pm_dir_path) {
+        int err = memkind_create_pmem(server.pm_dir_path, server.pm_file_size, &server.pmem_kind1);
+        if (err) {
+            perror("memkind_create_pmem()");
+            fprintf(stderr, "Unable to create pmem partition\n");
+            exit(1);
+        } else {
+            printf("memkind created\n");
+        }
+    } else {
+        fprintf(stderr,"Please specify the location for memkind allocations with given size.\n");
+        fprintf(stderr,"Example: ./redis-server --pmdir /mnt/pmem/ 1g\n\n");
+        exit(1);
+    }
+
     initServer();
     if (background || server.pidfile) createPidFile();
     redisSetProcTitle(argv[0]);
@@ -4202,6 +4221,9 @@ int main(int argc, char **argv) {
     aeSetAfterSleepProc(server.el,afterSleep);
     aeMain(server.el);
     aeDeleteEventLoop(server.el);
+#if defined(USE_MEMKIND)
+    memkind_destroy_kind(server.pmem_kind1);
+#endif
     return 0;
 }
 
