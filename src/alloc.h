@@ -70,8 +70,16 @@ static const struct __alloc __z_alloc = {
 };
 static const struct __alloc *z_alloc = &__z_alloc;
 
+static void * mmalloc_ram_info_wrapper (size_t size)
+{
+    void* ptr = mmalloc(size + MEMKIND_PREFIX_SIZE);
+    uint64_t *is_ram = ptr;
+    *is_ram = 0;
+    return (void*)((char*)ptr + MEMKIND_PREFIX_SIZE);
+}
+
 static const struct __alloc __m_alloc = {
-    mmalloc,
+    mmalloc_ram_info_wrapper,
     mcalloc,
     mrealloc,
     mfree,

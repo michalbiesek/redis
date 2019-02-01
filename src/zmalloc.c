@@ -86,6 +86,14 @@ void zlibc_free(void *ptr) {
 static size_t used_memory = 0;
 pthread_mutex_t used_memory_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+#ifdef USE_MEMKIND
+static void (*pmem_free)(void* ptr) = NULL;
+void zmalloc_init_pmem_free(void (*_pmem_free)(void*)) {
+    fprintf(stderr,"zmalloc_init_pmem_free was called\n");
+    pmem_free = _pmem_free;
+}
+#endif
+
 static void zmalloc_default_oom(size_t size) {
     fprintf(stderr, "zmalloc: Out of memory trying to allocate %zu bytes\n",
         size);
@@ -95,7 +103,7 @@ static void zmalloc_default_oom(size_t size) {
 
 static void (*zmalloc_oom_handler)(size_t) = zmalloc_default_oom;
 
-void *zmalloc(size_t size) {
+void *zmalloc_local(size_t size) {
     void *ptr = malloc(size+PREFIX_SIZE);
 
     if (!ptr) zmalloc_oom_handler(size);
@@ -106,6 +114,17 @@ void *zmalloc(size_t size) {
     *((size_t*)ptr) = size;
     update_zmalloc_stat_alloc(size+PREFIX_SIZE);
     return (char*)ptr+PREFIX_SIZE;
+#endif
+}
+
+void *zmalloc(size_t size) {
+#ifdef USE_MEMKIND
+    void* ptr = zmalloc_local(size + MEMKIND_PREFIX_SIZE);
+    uint64_t *is_ram = ptr;
+    *is_ram = 1;
+    return (void*)((char*)ptr + MEMKIND_PREFIX_SIZE);
+#else
+    return zmalloc_local(ptr,size);
 #endif
 }
 
@@ -127,7 +146,7 @@ void zfree_no_tcache(void *ptr) {
 }
 #endif
 
-void *zcalloc(size_t size) {
+static void *zcalloc_local(size_t size) {
     void *ptr = calloc(1, size+PREFIX_SIZE);
 
     if (!ptr) zmalloc_oom_handler(size);
@@ -141,7 +160,17 @@ void *zcalloc(size_t size) {
 #endif
 }
 
-void *zrealloc(void *ptr, size_t size) {
+void *zcalloc(size_t size) {
+#ifdef USE_MEMKIND
+    void* ptr = zcalloc_local(size + MEMKIND_PREFIX_SIZE);
+    uint64_t *is_ram = ptr;
+    *is_ram = 1;
+    return (void*)((char*)ptr + MEMKIND_PREFIX_SIZE);
+#else
+    return zcalloc_local(ptr,size);
+#endif
+}
+static void *zrealloc_local(void *ptr, size_t size) {
 #ifndef HAVE_MALLOC_SIZE
     void *realptr;
 #endif
@@ -170,6 +199,22 @@ void *zrealloc(void *ptr, size_t size) {
 #endif
 }
 
+void *zrealloc(void *ptr, size_t size) {
+#ifdef USE_MEMKIND
+    void* new_ptr = NULL;
+    if (ptr) {
+        new_ptr = zrealloc_local((void*)((char*)(ptr) - MEMKIND_PREFIX_SIZE), size + MEMKIND_PREFIX_SIZE);
+    } else {
+        new_ptr = zmalloc_local(size + MEMKIND_PREFIX_SIZE);
+    }
+    uint64_t *is_ram = new_ptr;
+    *is_ram = 1;
+    return (char*)new_ptr + MEMKIND_PREFIX_SIZE;
+#else
+    return zrealloc_local(ptr,size);
+#endif
+}
+
 /* Provide zmalloc_size() for systems where this function is not provided by
  * malloc itself, given that in that case we store a header with this
  * information as the first bytes of every allocation. */
@@ -187,7 +232,7 @@ size_t zmalloc_usable(void *ptr) {
 }
 #endif
 
-void zfree(void *ptr) {
+static void zfree_local(void *ptr) {
 #ifndef HAVE_MALLOC_SIZE
     void *realptr;
     size_t oldsize;
@@ -202,6 +247,23 @@ void zfree(void *ptr) {
     oldsize = *((size_t*)realptr);
     update_zmalloc_stat_free(oldsize+PREFIX_SIZE);
     free(realptr);
+#endif
+}
+
+void zfree (void* ptr)
+{
+#ifdef USE_MEMKIND
+    if(ptr)
+    {
+    uint64_t *is_ram = (uint64_t*)((char*)(ptr) - MEMKIND_PREFIX_SIZE);
+    if(*is_ram) {
+        zfree_local(is_ram);
+    }else {
+        pmem_free(is_ram);
+    }
+    }
+#else
+    zfree_local(ptr);
 #endif
 }
 
