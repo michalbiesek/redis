@@ -31,9 +31,9 @@ fi
 cd $(dirname $0)
 EXTRA_CONF=$@
 
-if [ ! -f ./jemalloc/obj/lib/libjemalloc_pic.a ]; then
-	./build_jemalloc.sh $EXTRA_CONF
-fi
+#if [ ! -f ./jemalloc/obj/lib/libjemalloc_pic.a ]; then
+#	./build_jemalloc.sh $EXTRA_CONF
+#fi
 
 if [ ! -f ./configure ]; then
 	./autogen.sh
@@ -45,4 +45,4 @@ fi
 
 #use V=1 for full cmdlines of build
 make all -j $MAKEOPTS
-make checkprogs -j $MAKEOPTS
+#make checkprogs -j $MAKEOPTS
