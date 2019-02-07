@@ -49,6 +49,10 @@
 #include <lua.h>
 #include <signal.h>
 
+#ifdef USE_MEMKIND
+#include "memkind.h"
+#endif
+
 typedef long long mstime_t; /* millisecond time type. */
 
 #include "ae.h"      /* Event driven programming library */
@@ -1052,6 +1056,12 @@ struct redisServer {
     int supervised_mode;            /* See SUPERVISED_* */
     int daemonize;                  /* True if running as a daemon */
     clientBufferLimitsConfig client_obuf_limits[CLIENT_TYPE_OBUF_COUNT];
+    /* PM parameters */
+    struct memkind *pmem_kind1;     /* Persistent memory kind */
+    char* pm_dir_path;              /* Path to pmem directory */
+    int keys_on_pm;                /* Keys on Persistent memory */
+    size_t pm_file_size;            /* Limit for pmem pool size */
+    int use_volatile;              /* Indicates volatile usage */
     /* AOF persistence */
     int aof_state;                  /* AOF_(ON|OFF|WAIT_REWRITE) */
     int aof_fsync;                  /* Kind of fsync() policy */

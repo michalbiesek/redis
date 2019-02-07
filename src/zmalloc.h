@@ -116,7 +116,7 @@ int zmalloc_test(int argc, char **argv);
 #endif
 
 #ifdef USE_MEMKIND
-void zmalloc_init_pmem_kind(void (*_pmem_free)(void*));
+void zmalloc_init_pmem_kind(struct memkind * pmem_kind);
 #endif
 
 #endif /* __ZMALLOC_H */

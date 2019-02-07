@@ -692,7 +692,7 @@ MEMKIND_EXPORT void memkind_freex(struct memkind *kind, void *ptr, int flags)
 #endif
         pthread_once(&kind->init_once, kind->ops->init_once);
         if (!kind) {
-            heap_manager_free(kind, ptr);
+            heap_manager_freex(kind, ptr, flags);
         } else {
             pthread_once(&kind->init_once, kind->ops->init_once);
             kind->ops->freex(kind, ptr, flags);

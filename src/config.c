@@ -467,6 +467,22 @@ void loadServerConfigFromString(char *config) {
             server.config_hz = atoi(argv[1]);
             if (server.config_hz < CONFIG_MIN_HZ) server.config_hz = CONFIG_MIN_HZ;
             if (server.config_hz > CONFIG_MAX_HZ) server.config_hz = CONFIG_MAX_HZ;
+#ifdef USE_MEMKIND
+        } else if (!strcasecmp(argv[0],"pmdir") && (argc == 3)) {
+            server.pm_dir_path = zstrdup(argv[1]);
+            if (access(server.pm_dir_path, X_OK|W_OK) == -1) {
+                err = "unable to write to pmem directory"; goto loaderr;
+            }
+            long long size = memtoll(argv[2],NULL);
+            server.pm_file_size = size;
+            server.use_volatile = 1;
+        } else if (!strcasecmp(argv[0],"keys-on-pm") && (argc == 2)) {
+            int yes;
+            if ((yes = yesnotoi(argv[1])) == -1) {
+                err = "argument must be 'yes' or 'no'"; goto loaderr;
+            }
+            server.keys_on_pm = (yes ? 1 : 0);
+#endif
         } else if (!strcasecmp(argv[0],"appendonly") && argc == 2) {
             int yes;
 
