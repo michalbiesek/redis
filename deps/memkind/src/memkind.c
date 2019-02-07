@@ -562,6 +562,29 @@ MEMKIND_EXPORT size_t memkind_malloc_usable_size(struct memkind *kind,
     return size;
 }
 
+MEMKIND_EXPORT void *memkind_mallocx(struct memkind *kind, size_t size, int flags)
+{
+    void *result;
+
+    pthread_once(&kind->init_once, kind->ops->init_once);
+
+#ifdef MEMKIND_DECORATION_ENABLED
+    if (memkind_malloc_pre) {
+        memkind_malloc_pre(&kind, &size);
+    }
+#endif
+
+    result = kind->ops->mallocx(kind, size, flags);
+
+#ifdef MEMKIND_DECORATION_ENABLED
+    if (memkind_malloc_post) {
+        memkind_malloc_post(kind, size, &result);
+    }
+#endif
+
+    return result;
+}
+
 MEMKIND_EXPORT void *memkind_malloc(struct memkind *kind, size_t size)
 {
     void *result;
@@ -658,6 +681,27 @@ MEMKIND_EXPORT void *memkind_realloc(struct memkind *kind, void *ptr,
 #endif
 
     return result;
+}
+
+MEMKIND_EXPORT void memkind_freex(struct memkind *kind, void *ptr, int flags)
+{
+#ifdef MEMKIND_DECORATION_ENABLED
+    if (memkind_free_pre) {
+        memkind_free_pre(&kind, &ptr);
+    }
+#endif
+        pthread_once(&kind->init_once, kind->ops->init_once);
+        if (!kind) {
+            heap_manager_free(kind, ptr);
+        } else {
+            pthread_once(&kind->init_once, kind->ops->init_once);
+            kind->ops->freex(kind, ptr, flags);
+        }
+#ifdef MEMKIND_DECORATION_ENABLED
+    if (memkind_free_post) {
+        memkind_free_post(kind, ptr);
+    }
+#endif
 }
 
 MEMKIND_EXPORT void memkind_free(struct memkind *kind, void *ptr)

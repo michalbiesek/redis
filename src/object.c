@@ -1418,7 +1418,7 @@ NULL
 
         freeMemoryOverheadData(mh);
     } else if (!strcasecmp(c->argv[1]->ptr,"malloc-stats") && c->argc == 2) {
-#if defined(USE_JEMALLOC)
+#if defined(USE_JEMALLOC) || defined(USE_MEMKIND)
         sds info = sdsempty();
         je_malloc_stats_print(inputCatSds, &info, NULL);
         addReplyBulkSds(c, info);
@@ -1429,7 +1429,7 @@ NULL
         sds report = getMemoryDoctorReport();
         addReplyBulkSds(c,report);
     } else if (!strcasecmp(c->argv[1]->ptr,"purge") && c->argc == 2) {
-#if defined(USE_JEMALLOC)
+#if defined(USE_JEMALLOC) || defined(USE_MEMKIND)
         char tmp[32];
         unsigned narenas = 0;
         size_t sz = sizeof(unsigned);

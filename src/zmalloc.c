@@ -69,6 +69,13 @@ void zlibc_free(void *ptr) {
 #define free(ptr) je_free(ptr)
 #define mallocx(size,flags) je_mallocx(size,flags)
 #define dallocx(ptr,flags) je_dallocx(ptr,flags)
+#elif defined(USE_MEMKIND)
+#define malloc(size) memkind_malloc(MEMKIND_DEFAULT,size)
+#define calloc(count,size) memkind_calloc(MEMKIND_DEFAULT,count,size)
+#define realloc(ptr,size) memkind_realloc(MEMKIND_DEFAULT,ptr,size)
+#define free(ptr) memkind_free(NULL,ptr)
+#define mallocx(size,flags) memkind_mallocx(MEMKIND_DEFAULT,size,flags)
+#define dallocx(ptr,flags) memkind_freex(MEMKIND_DEFAULT,ptr,flags)
 #endif
 
 #define update_zmalloc_stat_alloc(__n) do { \
@@ -95,7 +102,32 @@ static void zmalloc_default_oom(size_t size) {
 
 static void (*zmalloc_oom_handler)(size_t) = zmalloc_default_oom;
 
+#ifdef USE_MEMKIND
+void *zpmemmalloc(size_t size) {
+
+    if ( size + PREFIX_SIZE == 0){
+        return NULL;
+    }
+    void *ptr = malloc(size+PREFIX_SIZE);
+
+    if (!ptr) zmalloc_oom_handler(size);
+#ifdef HAVE_MALLOC_SIZE
+    update_zmalloc_stat_alloc(zmalloc_size(ptr));
+    return ptr;
+#else
+    *((size_t*)ptr) = size;
+    update_zmalloc_stat_alloc(size+PREFIX_SIZE);
+    return (char*)ptr+PREFIX_SIZE;
+#endif
+}
+#endif
+
 void *zmalloc(size_t size) {
+#ifdef USE_MEMKIND
+    if ( size + PREFIX_SIZE == 0){
+        return NULL;
+    }
+#endif
     void *ptr = malloc(size+PREFIX_SIZE);
 
     if (!ptr) zmalloc_oom_handler(size);
@@ -301,7 +333,7 @@ size_t zmalloc_get_rss(void) {
 }
 #endif
 
-#if defined(USE_JEMALLOC)
+#if defined(USE_JEMALLOC) || defined(USE_MEMKIND)
 int zmalloc_get_allocator_info(size_t *allocated,
                                size_t *active,
                                size_t *resident) {

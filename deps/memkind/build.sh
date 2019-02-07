@@ -24,14 +24,14 @@
 
 set -e
 
-if [ -z "$JE_PREFIX" ]; then
-        export JE_PREFIX=jemk_
-fi
+#if [ -z "$JE_PREFIX" ]; then
+        export JE_PREFIX=je_
+#fi
 
 cd $(dirname $0)
 EXTRA_CONF=$@
 
-#if [ ! -f ./jemalloc/obj/lib/libjemalloc_pic.a ]; then
+#if [ ! -f ./jemalloc/lib/libjemalloc.a ]; then
 #	./build_jemalloc.sh $EXTRA_CONF
 #fi
 

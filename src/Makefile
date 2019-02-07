@@ -16,7 +16,7 @@ release_hdr := $(shell sh -c './mkreleasehdr.sh')
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
 uname_M := $(shell sh -c 'uname -m 2>/dev/null || echo not')
 OPTIMIZATION?=-O2
-DEPENDENCY_TARGETS=hiredis linenoise lua memkind
+DEPENDENCY_TARGETS=hiredis linenoise lua
 NODEPS:=clean distclean
 
 # Default settings
@@ -38,7 +38,7 @@ MALLOC=libc
 ifneq ($(uname_M),armv6l)
 ifneq ($(uname_M),armv7l)
 ifeq ($(uname_S),Linux)
-	MALLOC=jemalloc
+        MALLOC=memkind
 endif
 endif
 endif
@@ -139,9 +139,9 @@ ifeq ($(MALLOC),tcmalloc)
 endif
 
 ifeq ($(MALLOC),memkind)
-	DEPENDENCY_TARGETS+= memkind
-	FINAL_CFLAGS+= -DUSE_MEMKIND -I../deps/memkind/include
-	FINAL_LIBS := ../deps/memkind/.libs/libmemkind.a $(FINAL_LIBS)
+        DEPENDENCY_TARGETS+= jemalloc memkind
+        FINAL_CFLAGS+= -DUSE_MEMKIND -I../deps/memkind/include -I../deps/jemalloc/include
+        FINAL_LIBS := ../deps/memkind/.libs/libmemkind.a -lnuma $(FINAL_LIBS)
 endif
 
 ifeq ($(MALLOC),tcmalloc_minimal)

@@ -493,6 +493,10 @@ MEMKIND_EXPORT void *memkind_arena_malloc(struct memkind *kind, size_t size)
     return result;
 }
 
+MEMKIND_EXPORT void memkind_arena_freex(struct memkind *kind, void *ptr, int flags)
+{
+    jemk_dallocx(ptr,flags);
+}
 MEMKIND_EXPORT void memkind_arena_free(struct memkind *kind, void *ptr)
 {
     if (!kind && ptr != NULL) {

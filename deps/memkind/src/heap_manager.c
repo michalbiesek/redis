@@ -25,7 +25,6 @@
 #include <memkind/internal/heap_manager.h>
 #include <memkind/internal/tbb_wrapper.h>
 #include <memkind/internal/memkind_arena.h>
-
 #include <stdio.h>
 #include <pthread.h>
 #include <string.h>
@@ -37,18 +36,21 @@ pthread_once_t heap_manager_init_once_g = PTHREAD_ONCE_INIT;
 struct heap_manager_ops {
     void (*init)(struct memkind *kind);
     void (*heap_manager_free)(struct memkind *kind, void *ptr);
+    void (*heap_manager_freex)(struct memkind *kind, void *ptr, int flags);
     void*(*heap_manager_realloc)(struct memkind *kind, void *ptr, size_t size);
 };
 
 struct heap_manager_ops arena_heap_manager_g = {
     .init = memkind_arena_init,
     .heap_manager_free = memkind_arena_free,
+    .heap_manager_freex = memkind_arena_freex,
     .heap_manager_realloc = memkind_arena_realloc
 };
 
 struct heap_manager_ops tbb_heap_manager_g = {
     .init = tbb_initialize,
     .heap_manager_free = tbb_pool_free,
+    .heap_manager_freex = memkind_arena_freex,
     .heap_manager_realloc = tbb_pool_realloc
 };
 
@@ -75,6 +77,11 @@ void heap_manager_init(struct memkind *kind)
 void heap_manager_free(struct memkind *kind, void *ptr)
 {
     get_heap_manager()->heap_manager_free(kind, ptr);
+}
+
+void heap_manager_freex(struct memkind *kind, void *ptr, int flags)
+{
+    get_heap_manager()->heap_manager_freex(kind, ptr, flags);
 }
 
 void* heap_manager_realloc(struct memkind *kind, void *ptr, size_t size)

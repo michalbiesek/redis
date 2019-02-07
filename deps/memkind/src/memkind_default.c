@@ -27,6 +27,7 @@
 #include <memkind/internal/memkind_log.h>
 #include <memkind/internal/tbb_wrapper.h>
 #include <memkind/internal/heap_manager.h>
+#include <stdio.h>
 
 #include <numa.h>
 #include <numaif.h>
@@ -43,10 +44,12 @@ MEMKIND_EXPORT struct memkind_ops MEMKIND_DEFAULT_OPS = {
     .create = memkind_default_create,
     .destroy = memkind_default_destroy,
     .malloc = memkind_default_malloc,
+    .mallocx = memkind_default_mallocx,
     .calloc = memkind_default_calloc,
     .posix_memalign = memkind_default_posix_memalign,
     .realloc = memkind_default_realloc,
     .free = memkind_default_free,
+    .freex = memkind_default_freex,
     .init_once = memkind_default_init_once,
     .malloc_usable_size = memkind_default_malloc_usable_size,
     .finalize = memkind_default_destroy
@@ -78,6 +81,11 @@ MEMKIND_EXPORT void *memkind_default_malloc(struct memkind *kind, size_t size)
         return NULL;
     }
     return jemk_malloc(size);
+}
+
+MEMKIND_EXPORT void *memkind_default_mallocx(struct memkind *kind, size_t size, int flags)
+{
+    return jemk_mallocx(size, flags);
 }
 
 MEMKIND_EXPORT void *memkind_default_calloc(struct memkind *kind, size_t num,
@@ -122,6 +130,11 @@ MEMKIND_EXPORT void *memkind_default_realloc(struct memkind *kind, void *ptr,
 MEMKIND_EXPORT void memkind_default_free(struct memkind *kind, void *ptr)
 {
     jemk_free(ptr);
+}
+
+MEMKIND_EXPORT void memkind_default_freex(struct memkind *kind, void *ptr, int flags)
+{
+    jemk_dallocx(ptr,flags);
 }
 
 MEMKIND_EXPORT size_t memkind_default_malloc_usable_size(struct memkind *kind,

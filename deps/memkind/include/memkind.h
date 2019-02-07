@@ -263,7 +263,7 @@ int memkind_check_available(memkind_t kind);
 /// \return Pointer to the allocated memory
 ///
 void *memkind_malloc(memkind_t kind, size_t size);
-
+void *memkind_mallocx(memkind_t kind, size_t size, int flags);
 ///
 /// \brief Obtain size of block of memory allocated with the memkind API
 /// \note STANDARD API
@@ -314,7 +314,7 @@ void *memkind_realloc(memkind_t kind, void *ptr, size_t size);
 /// \param ptr pointer to the allocated memory
 ///
 void memkind_free(memkind_t kind, void *ptr);
-
+void memkind_freex(memkind_t kind, void *ptr, int flags);
 #ifdef __cplusplus
 }
 #endif

@@ -55,6 +55,12 @@
 #error "Newer version of jemalloc required"
 #endif
 
+#elif defined(USE_MEMKIND)
+#define ZMALLOC_LIB ("jemalloc-" __xstr(JEMALLOC_VERSION_MAJOR) "." __xstr(JEMALLOC_VERSION_MINOR) "." __xstr(JEMALLOC_VERSION_BUGFIX))
+#include "memkind.h"
+#define HAVE_MALLOC_SIZE 1
+#define zmalloc_size(p) memkind_malloc_usable_size(MEMKIND_DEFAULT,p)
+
 #elif defined(__APPLE__)
 #include <malloc/malloc.h>
 #define HAVE_MALLOC_SIZE 1
@@ -73,8 +79,10 @@
 /* We can enable the Redis defrag capabilities only if we are using Jemalloc
  * and the version used is our special version modified for Redis having
  * the ability to return per-allocation fragmentation hints. */
-#if defined(USE_JEMALLOC) && defined(JEMALLOC_FRAG_HINT)
+#if defined(JEMALLOC_FRAG_HINT)
+#if defined(USE_JEMALLOC) || defined(USE_MEMKIND)
 #define HAVE_DEFRAG
+#endif
 #endif
 
 void *zmalloc(size_t size);
@@ -105,6 +113,10 @@ size_t zmalloc_usable(void *ptr);
 
 #ifdef REDIS_TEST
 int zmalloc_test(int argc, char **argv);
+#endif
+
+#ifdef USE_MEMKIND
+void zmalloc_init_pmem_kind(void (*_pmem_free)(void*));
 #endif
 
 #endif /* __ZMALLOC_H */
