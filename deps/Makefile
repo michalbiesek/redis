@@ -37,7 +37,10 @@ distclean:
 	-(cd linenoise && $(MAKE) clean) > /dev/null || true
 	-(cd lua && $(MAKE) clean) > /dev/null || true
 	-(cd jemalloc && [ -f Makefile ] && $(MAKE) distclean) > /dev/null || true
-	-(rm -f .make-*)
+	-(cd memkind && $(MAKE) clean ) > /dev/null || true
+	-(rm memkind/configure) > /dev/null || true
+	-(rm memkind/jemalloc/obj/lib/libjemalloc_pic.a) > /dev/null || true
+	-(rm - f .make-*)
 
 .PHONY: distclean
 
@@ -81,3 +84,9 @@ jemalloc: .make-prerequisites
 	cd jemalloc && $(MAKE) CFLAGS="$(JEMALLOC_CFLAGS)" LDFLAGS="$(JEMALLOC_LDFLAGS)" lib/libjemalloc.a
 
 .PHONY: jemalloc
+
+memkind: .make-prerequisites
+	@printf '%b %b\n' $(MAKECOLOR)MAKE$(ENDCOLOR) $(BINCOLOR)$@$(ENDCOLOR)
+	cd memkind && ./build.sh
+
+.PHONY: memkind
