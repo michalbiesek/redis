@@ -129,6 +129,7 @@ void *zmalloc_pmem(size_t size) {
     atomicDecr(used_pmem_memory,__n); \
 } while(0)
 
+static size_t pmem_threeshold = UINT_MAX;
 static size_t used_memory = 0;
 static size_t used_pmem_memory = 0;
 pthread_mutex_t used_memory_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -142,7 +143,7 @@ static void zmalloc_default_oom(size_t size) {
 
 static void (*zmalloc_oom_handler)(size_t) = zmalloc_default_oom;
 
-void *zmalloc(size_t size) {
+static void *zmalloc_dram(size_t size) {
     void *ptr = malloc(size+PREFIX_SIZE);
 #ifdef USE_MEMKIND
     if (!ptr && errno==ENOMEM) zmalloc_oom_handler(size);
@@ -158,6 +159,15 @@ void *zmalloc(size_t size) {
     return (char*)ptr+PREFIX_SIZE;
 #endif
 }
+
+void zmalloc_set_threshold( size_t threeshold) {
+    pmem_threeshold =threeshold;
+}
+
+void *zmalloc(size_t size) {
+    return (size < pmem_threeshold) ? zmalloc_dram(size) : zmalloc_pmem(size);
+}
+
 #ifdef USE_MEMKIND
 static int zmalloc_is_pmem(void * ptr) {
     struct memkind *temp_kind = memkind_detect_kind(ptr);

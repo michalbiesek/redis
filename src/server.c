@@ -4883,6 +4883,7 @@ int main(int argc, char **argv) {
     setlocale(LC_COLLATE,"");
     tzset(); /* Populates 'timezone' global. */
     zmalloc_set_oom_handler(redisOutOfMemoryHandler);
+    zmalloc_set_threshold(64); ///add parametrization
     srand(time(NULL)^getpid());
     gettimeofday(&tv,NULL);
 
