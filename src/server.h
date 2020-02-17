@@ -343,16 +343,6 @@ typedef long long ustime_t; /* microsecond time type. */
 #define AOF_FSYNC_ALWAYS 1
 #define AOF_FSYNC_EVERYSEC 2
 
-/* PMEM option */
-#define PMEM_NONE 0 /* PMEM: disabled */
-/* PMEM string option */
-#define PMEM_STR_VAL (1<<0) /* String: value on PMEM */
-#define PMEM_STR_ROBJ (1<<1) /* String: robj on PMEM */
-#define PMEM_STR_VAL_ROBJ \
-     (PMEM_STR_VAL | PMEM_STR_ROBJ) /* String: value and robj on PMEM */
-/* PMEM embedded string option */
-#define PMEM_EMBSTR_ROBJVAL (1<<2) /* Embedded string: robj + value on PMEM */
-
 /* Replication diskless load defines */
 #define REPL_DISKLESS_LOAD_DISABLED 0
 #define REPL_DISKLESS_LOAD_WHEN_DB_EMPTY 1
@@ -1309,10 +1299,6 @@ struct redisServer {
     int lfu_log_factor;             /* LFU logarithmic counter factor. */
     int lfu_decay_time;             /* LFU counter decay factor. */
     long long proto_max_bulk_len;   /* Protocol bulk length maximum size. */
-    /* PMEM */
-    int keys_on_pmem;               /* Determine if key should be moved to PMEM. */
-    int dictionary_entries_on_pmem; /* Determine if dictionary entries should be moved to PMEM. */
-    int pmem_str_mode;              /* Persistent Memory policy for string/embedded string. */
     /* Blocked clients */
     unsigned int blocked_clients;   /* # of clients executing a blocking cmd.*/
     unsigned int blocked_clients_by_type[BLOCKED_NUM];

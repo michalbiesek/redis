@@ -2218,9 +2218,6 @@ standardConfig configs[] = {
     createBoolConfig("cluster-enabled", NULL, IMMUTABLE_CONFIG, server.cluster_enabled, 0, NULL, NULL),
     createBoolConfig("appendonly", NULL, MODIFIABLE_CONFIG, server.aof_enabled, 0, NULL, updateAppendonly),
     createBoolConfig("cluster-allow-reads-when-down", NULL, MODIFIABLE_CONFIG, server.cluster_allow_reads_when_down, 0, NULL, NULL),
-    createBoolConfig("keys-on-pmem", NULL, IMMUTABLE_CONFIG, server.keys_on_pmem, 0, isValidKeysOnPmem, NULL),
-    createBoolConfig("dictionary-entries-on-pmem", NULL, IMMUTABLE_CONFIG, server.dictionary_entries_on_pmem, 0, isValidDictionaryEntriesOnPmem, NULL),
-
     /* String Configs */
     createStringConfig("aclfile", NULL, IMMUTABLE_CONFIG, ALLOW_EMPTY_STRING, server.acl_filename, "", NULL, NULL),
     createStringConfig("unixsocket", NULL, IMMUTABLE_CONFIG, EMPTY_STRING_IS_NULL, server.unixsocket, NULL, NULL, NULL),
