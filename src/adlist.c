@@ -106,6 +106,15 @@ void listRelease(list *list)
     zfree(list);
 }
 
+/* Free the whole list from DRAM.
+ *
+ * This function can't fail. */
+void listReleaseDRAM(list *list)
+{
+    listEmpty(list);
+    zfree_dram(list);
+}
+
 static list *_listAddNodeHead(list *list, void *value, int on_dram)
 {
     listNode *node;
