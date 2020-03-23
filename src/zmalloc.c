@@ -77,10 +77,8 @@ void zlibc_free(void *ptr) {
 #include <errno.h>
 #define malloc(size) memkind_malloc(MEMKIND_DEFAULT,size)
 #define calloc(count,size) memkind_calloc(MEMKIND_DEFAULT,count,size)
-#define realloc(ptr,size) memkind_realloc(NULL,ptr,size)
 #define realloc_dram(ptr,size) memkind_realloc(MEMKIND_DEFAULT,ptr,size)
 #define realloc_pmem(ptr,size) memkind_realloc(MEMKIND_DAX_KMEM,ptr,size)
-#define free(ptr) memkind_free(NULL,ptr)
 #define free_dram(ptr) memkind_free(MEMKIND_DEFAULT,ptr)
 #define free_pmem(ptr) memkind_free(MEMKIND_DAX_KMEM,ptr)
 #endif
@@ -92,13 +90,16 @@ static void zmalloc_pmem_not_available(void) {
     abort();
 }
 #define free_dram(ptr) free(ptr)
-#define free_pmem(ptr) zmalloc_pmem_not_available();
 #define realloc_dram(ptr,size) realloc(ptr,size)
-#define realloc_pmem(ptr,size) NULL; zmalloc_pmem_not_available();
 
 static int zmalloc_is_pmem(void * ptr) {
     (void)(ptr);
     return DRAM_LOCATION;
+}
+
+static void zfree_pmem(void *ptr) {
+    (void)(ptr);
+    zmalloc_pmem_not_available();
 }
 
 static void *zmalloc_pmem(size_t size) {
@@ -108,6 +109,13 @@ static void *zmalloc_pmem(size_t size) {
 }
 
 static void *zcalloc_pmem(size_t size) {
+    (void)(size);
+    zmalloc_pmem_not_available();
+    return NULL;
+}
+
+static void *zrealloc_pmem(void *ptr, size_t size) {
+    (void)(ptr);
     (void)(size);
     zmalloc_pmem_not_available();
     return NULL;
@@ -175,6 +183,24 @@ static int zmalloc_is_pmem(void * ptr) {
     return (temp_kind == MEMKIND_DEFAULT) ? DRAM_LOCATION : PMEM_LOCATION;
 }
 
+static void zfree_pmem(void *ptr) {
+#ifndef HAVE_MALLOC_SIZE
+    void *realptr;
+    size_t oldsize;
+#endif
+
+    if (ptr == NULL) return;
+#ifdef HAVE_MALLOC_SIZE
+    update_zmalloc_pmem_stat_free(zmalloc_size(ptr));
+    free_pmem(ptr);
+#else
+    realptr = (char*)ptr-PREFIX_SIZE;
+    oldsize = *((size_t*)realptr);
+    update_zmalloc_pmem_stat_free(oldsize+PREFIX_SIZE);
+    free_pmem(realptr);
+#endif
+}
+
 static void *zmalloc_pmem(size_t size) {
     void *ptr = memkind_malloc(MEMKIND_DAX_KMEM, size+PREFIX_SIZE);
     if (!ptr && errno==ENOMEM) zmalloc_oom_handler(size);
@@ -201,6 +227,39 @@ static void *zcalloc_pmem(size_t size) {
     return (char*)ptr+PREFIX_SIZE;
 #endif
 }
+
+static void *zrealloc_pmem(void *ptr, size_t size) {
+#ifndef HAVE_MALLOC_SIZE
+    void *realptr;
+#endif
+    size_t oldsize;
+    void *newptr;
+
+    if (size == 0 && ptr != NULL) {
+        zfree_pmem(ptr);
+        return NULL;
+    }
+    if (ptr == NULL) return zmalloc(size);
+#ifdef HAVE_MALLOC_SIZE
+    oldsize = zmalloc_size(ptr);
+    newptr = realloc_pmem(ptr,size);
+    if (!newptr) zmalloc_oom_handler(size);
+
+    update_zmalloc_pmem_stat_free(oldsize);
+    update_zmalloc_pmem_stat_alloc(zmalloc_size(newptr));
+    return newptr;
+#else
+    realptr = (char*)ptr-PREFIX_SIZE;
+    oldsize = *((size_t*)realptr);
+    newptr = realloc_pmem(realptr,size+PREFIX_SIZE);
+    if (!newptr) zmalloc_oom_handler(size);
+
+    *((size_t*)newptr) = size;
+    update_zmalloc_pmem_stat_free(oldsize+PREFIX_SIZE);
+    update_zmalloc_pmem_stat_alloc(size+PREFIX_SIZE);
+    return (char*)newptr+PREFIX_SIZE;
+#endif
+}
 #endif
 
 void *zmalloc(size_t size) {
@@ -225,7 +284,7 @@ void zfree_no_tcache(void *ptr) {
 }
 #endif
 
-static void *zcalloc_dram(size_t size) {
+void *zcalloc_dram(size_t size) {
     void *ptr = calloc(1, size+PREFIX_SIZE);
 
     if (!ptr) zmalloc_oom_handler(size);
@@ -243,7 +302,7 @@ void *zcalloc(size_t size) {
     return (size < pmem_threshold) ? zcalloc_dram(size) : zcalloc_pmem(size);
 }
 
-void *zrealloc(void *ptr, size_t size) {
+void *zrealloc_dram(void *ptr, size_t size) {
 #ifndef HAVE_MALLOC_SIZE
     void *realptr;
 #endif
@@ -251,50 +310,37 @@ void *zrealloc(void *ptr, size_t size) {
     void *newptr;
 
     if (size == 0 && ptr != NULL) {
-        zfree(ptr);
+        zfree_dram(ptr);
         return NULL;
     }
     if (ptr == NULL) return zmalloc(size);
-    int is_pmem = zmalloc_is_pmem(ptr);
 #ifdef HAVE_MALLOC_SIZE
     oldsize = zmalloc_size(ptr);
-    
-    if (!is_pmem) {
-        newptr = realloc_dram(ptr,size);
-    } else {
-        newptr = realloc_pmem(ptr,size);
-    }
+    newptr = realloc_dram(ptr,size);
     if (!newptr) zmalloc_oom_handler(size);
- 
-    if (!is_pmem) {
-        update_zmalloc_stat_free(oldsize);
-        update_zmalloc_stat_alloc(zmalloc_size(newptr));
-    } else {
-        update_zmalloc_pmem_stat_free(oldsize);
-        update_zmalloc_pmem_stat_alloc(zmalloc_size(newptr));
-    }
+
+    update_zmalloc_stat_free(oldsize);
+    update_zmalloc_stat_alloc(zmalloc_size(newptr));
     return newptr;
 #else
     realptr = (char*)ptr-PREFIX_SIZE;
     oldsize = *((size_t*)realptr);
-    if (!is_pmem) {
-        newptr = realloc_dram(realptr,size+PREFIX_SIZE);
-    } else {
-        newptr = realloc_pmem(realptr,size+PREFIX_SIZE);
-    }
-
+    newptr = realloc_dram(realptr,size+PREFIX_SIZE);
     if (!newptr) zmalloc_oom_handler(size);
 
     *((size_t*)newptr) = size;
-    if (!is_pmem) {
-        update_zmalloc_stat_free(oldsize+PREFIX_SIZE);
-        update_zmalloc_stat_alloc(size+PREFIX_SIZE);
-    } else {
-        update_zmalloc_pmem_stat_free(oldsize+PREFIX_SIZE);
-        update_zmalloc_pmem_stat_alloc(size+PREFIX_SIZE);
-    }
+    update_zmalloc_stat_free(oldsize+PREFIX_SIZE);
+    update_zmalloc_stat_alloc(size+PREFIX_SIZE);
     return (char*)newptr+PREFIX_SIZE;
 #endif
+}
+
+void *zrealloc(void *ptr, size_t size) {
+    if (!zmalloc_is_pmem(ptr)) {
+        return zrealloc_dram(ptr, size);
+    } else {
+        return zrealloc_pmem(ptr, size);
+    }
 }
 
 /* Provide zmalloc_size() for systems where this function is not provided by
@@ -332,24 +378,6 @@ void zfree_dram(void *ptr) {
 #endif
 }
 
-static void zfree_pmem(void *ptr) {
-#ifndef HAVE_MALLOC_SIZE
-    void *realptr;
-    size_t oldsize;
-#endif
-
-    if (ptr == NULL) return;
-#ifdef HAVE_MALLOC_SIZE
-    update_zmalloc_pmem_stat_free(zmalloc_size(ptr));
-    free_pmem(ptr);
-#else
-    realptr = (char*)ptr-PREFIX_SIZE;
-    oldsize = *((size_t*)realptr);
-    update_zmalloc_pmem_stat_free(oldsize+PREFIX_SIZE);
-    free_pmem(realptr);
-#endif
-}
-
 void zfree(void *ptr) {
     if (!zmalloc_is_pmem(ptr)) {
         zfree_dram(ptr);
@@ -381,6 +409,11 @@ size_t zmalloc_used_pmem_memory(void) {
 void zmalloc_set_oom_handler(void (*oom_handler)(size_t)) {
     zmalloc_oom_handler = oom_handler;
 }
+
+size_t zmalloc_get_threshold(void) {
+    return pmem_threshold;
+}
+
 void zmalloc_set_threshold(size_t threshold) {
     pmem_threshold = threshold;
 }
@@ -715,6 +748,25 @@ int zmalloc_test(int argc, char **argv) {
     printf("Reallocated to 456 bytes; used: %zu\n", zmalloc_used_memory());
     zfree(ptr);
     printf("Freed pointer; used: %zu\n", zmalloc_used_memory());
+    return 0;
+}
+
+int zmalloc_pmem_test(int argc, char **argv) {
+    void *ptr;
+
+    UNUSED(argc);
+    UNUSED(argv);
+    printf("Initial used PMEM memory: %zu\n", zmalloc_used_pmem_memory());
+    ptr = zmalloc_pmem(123);
+    if (!ptr) {
+       printf("ERROR! can't allocate Persistent Memory\n");
+       return 1;
+    }
+    printf("Allocated 123 bytes; used PMEM memory: %zu\n", zmalloc_used_pmem_memory());
+    ptr = zrealloc(ptr, 456);
+    printf("Reallocated to 456 bytes; used PMEM memory: %zu\n", zmalloc_used_pmem_memory());
+    zfree(ptr);
+    printf("Freed pointer; used PMEM memory: %zu\n", zmalloc_used_pmem_memory());
     return 0;
 }
 #endif

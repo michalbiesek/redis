@@ -95,6 +95,12 @@ start_server {tags {"introspection"}} {
             bind
             requirepass
             dram-pmem-ratio
+            memory-alloc-policy
+            initial-dynamic-threshold
+            dynamic-threshold-min
+            dynamic-threshold-max
+            memory-ratio-check-period
+            hashtable-on-dram
         }
 
         set configs {}

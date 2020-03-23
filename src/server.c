@@ -1698,6 +1698,9 @@ void databasesCron(void) {
         }
     }
 
+    /* Adjust PMEM threshold. */
+    adjustPmemThresholdCycle();
+
     /* Defrag keys gradually. */
     activeDefragCycle();
 
@@ -2885,7 +2888,8 @@ void initServer(void) {
     scriptingInit(1);
     slowlogInit();
     latencyMonitorInit();
-    zmalloc_set_threshold(server.pmem_threshold);
+    pmemThresholdInit();
+    dictSetAllocPolicy(server.hashtable_on_dram);
 }
 
 /* Some steps in server initialization need to be done last (after modules
@@ -4005,6 +4009,7 @@ sds genRedisInfoString(const char *section) {
         size_t zmalloc_used = zmalloc_used_memory();
         size_t zmalloc_pmem_used = zmalloc_used_pmem_memory();
         size_t total_system_mem = server.system_memory_size;
+        size_t pmem_threshold = zmalloc_get_threshold();
         const char *evict_policy = evictPolicyToString();
         long long memory_lua = (long long)lua_gc(server.lua,LUA_GCCOUNT,0)*1024;
         struct redisMemOverhead *mh = getMemoryOverheadData();
@@ -4039,6 +4044,7 @@ sds genRedisInfoString(const char *section) {
             "used_memory_startup:%zu\r\n"
             "used_memory_dataset:%zu\r\n"
             "used_memory_dataset_perc:%.2f%%\r\n"
+            "pmem_threshold:%zu\r\n"
             "used_memory_pmem:%zu\r\n"
             "used_memory_pmem_human:%s\r\n"
             "allocator_allocated:%zu\r\n"
@@ -4081,6 +4087,7 @@ sds genRedisInfoString(const char *section) {
             mh->startup_allocated,
             mh->dataset,
             mh->dataset_perc,
+            pmem_threshold,
             zmalloc_pmem_used,
             hmem_pmem,
             server.cron_malloc_stats.allocator_allocated,
@@ -4894,6 +4901,8 @@ int main(int argc, char **argv) {
             return crc64Test(argc, argv);
         } else if (!strcasecmp(argv[2], "zmalloc")) {
             return zmalloc_test(argc, argv);
+        } else if (!strcasecmp(argv[2], "pmem")) {
+            return zmalloc_pmem_test(argc, argv);
         }
 
         return -1; /* test not found */

@@ -92,10 +92,10 @@ configEnum aof_fsync_enum[] = {
 };
 
 configEnum memory_alloc_policy_enum[] = {
-    {"only-pmem", MEM_POLICY_ONLY_PMEM},
     {"only-dram", MEM_POLICY_ONLY_DRAM},
-    {"mixed-threshold", MEM_POLICY_MIXED_THRESHOLD},
-    {"mixed-ratio", MEM_POLICY_MIXED_RATIO},
+    {"only-pmem", MEM_POLICY_ONLY_PMEM},
+    {"threshold", MEM_POLICY_THRESHOLD},
+    {"ratio", MEM_POLICY_RATIO},
     {NULL, 0}
 };
 
@@ -387,8 +387,9 @@ void loadServerConfigFromString(char *config) {
                 if (dram == 0 || pmem == 0) {
                   err = "Invalid dram-pmem-ratio parameters"; goto loaderr;
                 }
-                server.pmem_ratio.dram_val = dram;
-                server.pmem_ratio.pmem_val = pmem;
+                server.dram_pmem_ratio.dram_val = dram;
+                server.dram_pmem_ratio.pmem_val = pmem;
+                server.target_pmem_dram_ratio = (double)pmem/dram;
         } else if (!strcasecmp(argv[0],"dir") && argc == 2) {
             if (chdir(argv[1]) == -1) {
                 serverLog(LL_WARNING,"Can't chdir to '%s': %s",
@@ -528,6 +529,21 @@ void loadServerConfigFromString(char *config) {
         i = linenum-1;
         err = "replicaof directive not allowed in cluster mode";
         goto loaderr;
+    }
+
+    if (server.memory_alloc_policy == MEM_POLICY_RATIO) {
+        if (server.dynamic_threshold_min > server.initial_dynamic_threshold) {
+            err = "dynamic threshold: initial value must be greater than or equal to minimum value for ratio memory allocation policy";
+            goto loaderr;
+        }
+        if (server.dynamic_threshold_max < server.initial_dynamic_threshold) {
+            err = "dynamic threshold: initial value must be less than or equal to maximum value for ratio memory allocation policy";
+            goto loaderr;
+        }
+        if (server.dram_pmem_ratio.pmem_val == 0 && server.dram_pmem_ratio.dram_val == 0) {
+            err = "dram-pmem-ratio must be defined for ratio memory allocation policy";
+            goto loaderr;
+        }
     }
 
     sdsfreesplitres(lines,totlines);
@@ -729,32 +745,6 @@ void configSetCommand(client *c) {
             server.client_obuf_limits[class].soft_limit_seconds = soft_seconds;
         }
         sdsfreesplitres(v,vlen);
-    } config_set_special_field("dram-pmem-ratio") {
-        int vlen, j;
-        sds *v = sdssplitlen(o->ptr,sdslen(o->ptr)," ",1,&vlen);
-        
-        /* We need value length equal 2: <dram_value> <pmem_value>*/
-        if (vlen != 2) {
-            sdsfreesplitres(v,vlen);
-            goto badfmt;
-        }
-         /* Perform sanity check before setting the new config:
-         * - Pmem >= 1, Dram >= 1 */
-        for (j = 0; j < vlen; j++) {
-            char *eptr;
-            long val;
-
-            val = strtoll(v[j], &eptr, 10);
-            if (eptr[0] != '\0' || val < 1) {
-                sdsfreesplitres(v,vlen);
-                goto badfmt;
-            }
-        }
-        server.pmem_ratio.dram_val = strtoll(v[0],NULL,10);
-        server.pmem_ratio.pmem_val = strtoll(v[1],NULL,10);
-
-        sdsfreesplitres(v,vlen);
-    
     } config_set_special_field("notify-keyspace-events") {
         int flags = keyspaceEventsStringToFlags(o->ptr);
 
@@ -903,7 +893,7 @@ void configGetCommand(client *c) {
     }
     if  (stringmatch(pattern,"dram-pmem-ratio",1)) {
         char buf[32];
-        snprintf(buf,sizeof(buf),"%d %d", server.pmem_ratio.dram_val, server.pmem_ratio.pmem_val);
+        snprintf(buf,sizeof(buf),"%d %d", server.dram_pmem_ratio.dram_val, server.dram_pmem_ratio.pmem_val);
         addReplyBulkCString(c,"dram-pmem-ratio");
         addReplyBulkCString(c,buf);
         matches++;
@@ -2078,44 +2068,10 @@ static int updateAppendonly(int val, int prev, char **err) {
     return 1;
 }
 
-static int updateMemoryallocpolicy(int val, int prev, char **err) {
-    UNUSED(prev);
-    switch(val) {
-        case MEM_POLICY_ONLY_DRAM:
-            zmalloc_set_threshold(UINT_MAX);
-            break;
-        case MEM_POLICY_ONLY_PMEM:
-            zmalloc_set_threshold(0U);
-            break;
-        case MEM_POLICY_MIXED_THRESHOLD:
-            zmalloc_set_threshold(server.pmem_threshold);
-            break;
-        case MEM_POLICY_MIXED_RATIO:
-            break;
-        default:
-            *err = "Unknown memory allocation policy.";
-            return 0;
-    }
-    return 1;
-}
-
-static int isValidPmemthreshold(long long  val, char **err) {
-#ifndef USE_MEMKIND
-    if (val != UINT_MAX) {
-        *err = "Persistent memory key on PMEM requires a Redis server compiled with a memkind ";
-        return 0;
-    }
-#else
-    UNUSED(val);
-    UNUSED(err);
-#endif
-    return 1;
-}
-
-static int updatePmemthreshold(long long val, long long prev, char **err) {
+static int updateStaticthreshold(long long val, long long prev, char **err) {
     UNUSED(prev);
     UNUSED(err);
-    if (server.memory_alloc_policy == MEM_POLICY_MIXED_THRESHOLD) {
+    if (server.memory_alloc_policy == MEM_POLICY_THRESHOLD) {
         zmalloc_set_threshold((size_t)val);
     }
 
@@ -2204,6 +2160,7 @@ standardConfig configs[] = {
     createBoolConfig("cluster-enabled", NULL, IMMUTABLE_CONFIG, server.cluster_enabled, 0, NULL, NULL),
     createBoolConfig("appendonly", NULL, MODIFIABLE_CONFIG, server.aof_enabled, 0, NULL, updateAppendonly),
     createBoolConfig("cluster-allow-reads-when-down", NULL, MODIFIABLE_CONFIG, server.cluster_allow_reads_when_down, 0, NULL, NULL),
+    createBoolConfig("hashtable-on-dram", NULL, IMMUTABLE_CONFIG, server.hashtable_on_dram, 1, NULL, NULL),
 
 
     /* String Configs */
@@ -2225,7 +2182,7 @@ standardConfig configs[] = {
     createEnumConfig("loglevel", NULL, MODIFIABLE_CONFIG, loglevel_enum, server.verbosity, LL_NOTICE, NULL, NULL),
     createEnumConfig("maxmemory-policy", NULL, MODIFIABLE_CONFIG, maxmemory_policy_enum, server.maxmemory_policy, MAXMEMORY_NO_EVICTION, NULL, NULL),
     createEnumConfig("appendfsync", NULL, MODIFIABLE_CONFIG, aof_fsync_enum, server.aof_fsync, AOF_FSYNC_EVERYSEC, NULL, NULL),
-    createEnumConfig("memory-alloc-policy", NULL, MODIFIABLE_CONFIG, memory_alloc_policy_enum, server.memory_alloc_policy, MEM_POLICY_ONLY_DRAM, NULL, updateMemoryallocpolicy),
+    createEnumConfig("memory-alloc-policy", NULL, IMMUTABLE_CONFIG, memory_alloc_policy_enum, server.memory_alloc_policy, MEM_POLICY_ONLY_DRAM, NULL, NULL),
 
     /* Integer configs */
     createIntConfig("databases", NULL, IMMUTABLE_CONFIG, 1, INT_MAX, server.dbnum, 16, INTEGER_CONFIG, NULL, NULL),
@@ -2259,10 +2216,14 @@ standardConfig configs[] = {
     createIntConfig("hz", NULL, MODIFIABLE_CONFIG, 0, INT_MAX, server.config_hz, CONFIG_DEFAULT_HZ, INTEGER_CONFIG, NULL, updateHZ),
     createIntConfig("min-replicas-to-write", "min-slaves-to-write", MODIFIABLE_CONFIG, 0, INT_MAX, server.repl_min_slaves_to_write, 0, INTEGER_CONFIG, NULL, updateGoodSlaves),
     createIntConfig("min-replicas-max-lag", "min-slaves-max-lag", MODIFIABLE_CONFIG, 0, INT_MAX, server.repl_min_slaves_max_lag, 10, INTEGER_CONFIG, NULL, updateGoodSlaves),
+    createIntConfig("memory-ratio-check-period", NULL, IMMUTABLE_CONFIG, 1, INT_MAX, server.ratio_check_period, 100, INTEGER_CONFIG, NULL, NULL),
 
     /* Unsigned int configs */
     createUIntConfig("maxclients", NULL, MODIFIABLE_CONFIG, 1, UINT_MAX, server.maxclients, 10000, INTEGER_CONFIG, NULL, updateMaxclients),
-    createUIntConfig("pmem-threshold", NULL, MODIFIABLE_CONFIG, 0, UINT_MAX, server.pmem_threshold, UINT_MAX, INTEGER_CONFIG, isValidPmemthreshold, updatePmemthreshold),
+    createUIntConfig("initial-dynamic-threshold", NULL, IMMUTABLE_CONFIG, 0, UINT_MAX, server.initial_dynamic_threshold, 64, INTEGER_CONFIG, NULL, NULL),
+    createUIntConfig("dynamic-threshold-min", NULL, IMMUTABLE_CONFIG, 0, UINT_MAX, server.dynamic_threshold_min, 24, INTEGER_CONFIG, NULL, NULL),
+    createUIntConfig("dynamic-threshold-max", NULL, IMMUTABLE_CONFIG, 0, UINT_MAX, server.dynamic_threshold_max, 10000, INTEGER_CONFIG, NULL, NULL),
+    createUIntConfig("static-threshold", NULL, MODIFIABLE_CONFIG, 0, UINT_MAX, server.static_threshold, 64, INTEGER_CONFIG, NULL, updateStaticthreshold),
 
     /* Unsigned Long configs */
     createULongConfig("active-defrag-max-scan-fields", NULL, MODIFIABLE_CONFIG, 1, LONG_MAX, server.active_defrag_max_scan_fields, 1000, INTEGER_CONFIG, NULL, NULL), /* Default: keys with more than 1000 fields will be processed separately */
