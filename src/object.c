@@ -1420,6 +1420,11 @@ NULL
         je_malloc_stats_print(inputCatSds, &info, NULL);
         addReplyVerbatim(c,info,sdslen(info),"txt");
         sdsfree(info);
+#elif defined(USE_MEMKIND)
+        sds info = sdsempty();
+        zmalloc_stats_print(inputCatSds, &info);
+        addReplyVerbatim(c,info,sdslen(info),"txt");
+        sdsfree(info);
 #else
         addReplyBulkCString(c,"Stats not supported for the current allocator");
 #endif

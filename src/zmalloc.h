@@ -106,7 +106,7 @@ void zlibc_free(void *ptr);
 void zmalloc_set_threshold(size_t threshold);
 size_t zmalloc_get_threshold(void);
 void *zmalloc_dram(size_t size);
-
+void zmalloc_stats_print(void (*write_cb) (void *, const char *), void *cbopaque);
 #ifdef HAVE_DEFRAG
 void zfree_no_tcache(void *ptr);
 void *zmalloc_no_tcache(size_t size);

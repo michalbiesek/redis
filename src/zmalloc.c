@@ -112,6 +112,11 @@ static void *zcalloc_pmem(size_t size) {
     zmalloc_pmem_not_available();
     return NULL;
 }
+
+void zmalloc_stats_print(void (*write_cb) (void *, const char *), void *cbopaque) {
+    (void)(write_cb);
+    (void)(cbopaque);
+}
 #endif
 
 #define update_zmalloc_stat_alloc(__n) do { \
@@ -200,6 +205,10 @@ static void *zcalloc_pmem(size_t size) {
     update_zmalloc_pmem_stat_alloc(size+PREFIX_SIZE);
     return (char*)ptr+PREFIX_SIZE;
 #endif
+}
+
+void zmalloc_stats_print(void (*write_cb) (void *, const char *), void *cbopaque) {
+    memkind_stats_print(write_cb, cbopaque);
 }
 #endif
 
