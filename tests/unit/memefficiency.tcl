@@ -73,7 +73,7 @@ start_server {tags {"defrag"}} {
                 }
 
                 # Wait for the active defrag to stop working.
-                wait_for_condition 150 100 {
+                wait_for_condition 200 100 {
                     [s active_defrag_running] eq 0
                 } else {
                     after 120 ;# serverCron only updates the info once in 100ms
