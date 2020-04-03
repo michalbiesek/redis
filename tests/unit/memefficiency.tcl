@@ -79,7 +79,7 @@ start_server {tags {"defrag"}} {
                     after 120 ;# serverCron only updates the info once in 100ms
                     puts [r info memory]
                     puts [r memory malloc-stats]
-                    fail "defrag didn't stop."
+                    fail "defrag didn't stop active defrag test."
                 }
 
                 # Test the the fragmentation is lower.
@@ -205,7 +205,7 @@ start_server {tags {"defrag"}} {
                     after 120 ;# serverCron only updates the info once in 100ms
                     puts [r info memory]
                     puts [r memory malloc-stats]
-                    fail "defrag didn't stop."
+                    fail "defrag didn't stop active defrag big key test."
                 }
 
                 # test the the fragmentation is lower
@@ -296,7 +296,7 @@ start_server {tags {"defrag"}} {
                     puts [r info memory]
                     puts [r info stats]
                     puts [r memory malloc-stats]
-                    fail "defrag didn't stop."
+                    fail "defrag didn't stop active defrag big list test."
                 }
 
                 # test the the fragmentation is lower
