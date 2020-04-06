@@ -77,10 +77,10 @@ void zlibc_free(void *ptr) {
 #include <errno.h>
 #define malloc(size) memkind_malloc(MEMKIND_DEFAULT,size)
 #define calloc(count,size) memkind_calloc(MEMKIND_DEFAULT,count,size)
-#define realloc(ptr,size) memkind_realloc(NULL,ptr,size)
+#define realloc(ptr,size) memkind_realloc(MEMKIND_DEFAULT,ptr,size)
 #define realloc_dram(ptr,size) memkind_realloc(MEMKIND_DEFAULT,ptr,size)
 #define realloc_pmem(ptr,size) memkind_realloc(MEMKIND_DAX_KMEM,ptr,size)
-#define free(ptr) memkind_free(NULL,ptr)
+#define free(ptr) memkind_free(MEMKIND_DEFAULT,ptr)
 #define free_dram(ptr) memkind_free(MEMKIND_DEFAULT,ptr)
 #define free_pmem(ptr) memkind_free(MEMKIND_DAX_KMEM,ptr)
 #endif
@@ -255,44 +255,44 @@ void *zrealloc(void *ptr, size_t size) {
         return NULL;
     }
     if (ptr == NULL) return zmalloc(size);
-    int is_pmem = zmalloc_is_pmem(ptr);
+//    int is_pmem = zmalloc_is_pmem(ptr);
 #ifdef HAVE_MALLOC_SIZE
     oldsize = zmalloc_size(ptr);
     
-    if (!is_pmem) {
+//    if (!is_pmem) {
         newptr = realloc_dram(ptr,size);
-    } else {
-        newptr = realloc_pmem(ptr,size);
-    }
+//    } else {
+//        newptr = realloc_pmem(ptr,size);
+//    }
     if (!newptr) zmalloc_oom_handler(size);
  
-    if (!is_pmem) {
+//    if (!is_pmem) {
         update_zmalloc_stat_free(oldsize);
         update_zmalloc_stat_alloc(zmalloc_size(newptr));
-    } else {
-        update_zmalloc_pmem_stat_free(oldsize);
-        update_zmalloc_pmem_stat_alloc(zmalloc_size(newptr));
-    }
+//    } else {
+//        update_zmalloc_pmem_stat_free(oldsize);
+//        update_zmalloc_pmem_stat_alloc(zmalloc_size(newptr));
+//    }
     return newptr;
 #else
     realptr = (char*)ptr-PREFIX_SIZE;
     oldsize = *((size_t*)realptr);
-    if (!is_pmem) {
+//    if (!is_pmem) {
         newptr = realloc_dram(realptr,size+PREFIX_SIZE);
-    } else {
-        newptr = realloc_pmem(realptr,size+PREFIX_SIZE);
-    }
+//    } else {
+//        newptr = realloc_pmem(realptr,size+PREFIX_SIZE);
+//    }
 
     if (!newptr) zmalloc_oom_handler(size);
 
     *((size_t*)newptr) = size;
-    if (!is_pmem) {
+//    if (!is_pmem) {
         update_zmalloc_stat_free(oldsize+PREFIX_SIZE);
         update_zmalloc_stat_alloc(size+PREFIX_SIZE);
-    } else {
-        update_zmalloc_pmem_stat_free(oldsize+PREFIX_SIZE);
-        update_zmalloc_pmem_stat_alloc(size+PREFIX_SIZE);
-    }
+//    } else {
+//        update_zmalloc_pmem_stat_free(oldsize+PREFIX_SIZE);
+//        update_zmalloc_pmem_stat_alloc(size+PREFIX_SIZE);
+//    }
     return (char*)newptr+PREFIX_SIZE;
 #endif
 }
@@ -351,11 +351,11 @@ static void zfree_pmem(void *ptr) {
 }
 
 void zfree(void *ptr) {
-    if (!zmalloc_is_pmem(ptr)) {
+//    if (!zmalloc_is_pmem(ptr)) {
         zfree_dram(ptr);
-    } else {
-        zfree_pmem(ptr);
-    }
+//    } else {
+//        zfree_pmem(ptr);
+//    }
 }
 
 char *zstrdup(const char *s) {
