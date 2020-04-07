@@ -44,13 +44,60 @@
 /* this method was added to jemalloc in order to help us understand which
  * pointers are worthwhile moving and which aren't */
 int je_get_defrag_hint(void* ptr, int *bin_util, int *run_util);
+#define DEST_SLAB_END(begin, size) ((uintptr_t)begin+ (uintptr_t)size)
+#define UTIL(free, total) (((total)-(free))/(total))
+
+struct mem_util_stats {
+    void *target_slab;      // address of the slab of a potential realloaction would go to ( NULL in case of large/huge allocation)
+    size_t nfree;           // number of free regions in the slab
+    size_t nregs;           // number of regions in the slab
+    size_t slab_size;       // size of the slab in bytes
+    size_t bin_nfree;       // total number of free regions in the bin the slab belongs to
+    size_t bin_nregs;       // total number of regions in the bin the slab belongs to
+};
+
+void* activeDefragAlloc(void *ptr) {
+    size_t out_sz = sizeof(struct mem_util_stats);
+    struct mem_util_stats out;
+    int err = je_mallctl("experimental.utilization.query", &out, &out_sz, &ptr,
+                           sizeof(ptr));
+    if (err) {
+        server.stat_active_defrag_misses++;
+        return NULL;
+    }
+
+    if (out.nregs == 0 || out.bin_nregs == 0) {
+        server.stat_active_defrag_misses++;
+        return NULL;
+    }
+        // Check if input pointer resides outside of potential reallocation slab
+    // Check if occupied regions inside the slab are below average occupied regions inside bin
+    // Check if there are some free regions in the destination slab
+    if (out.target_slab &&
+        ((ptr < out.target_slab) ||
+         (uintptr_t)ptr > DEST_SLAB_END(out.target_slab, out.slab_size)) &&
+        UTIL(out.nfree, out.nregs) <= UTIL(out.bin_nfree, out.bin_nregs) &&
+        out.nfree != 0) {
+        size_t size = zmalloc_size(ptr);
+        void *newptr = zmalloc_no_tcache(size);
+        if (!newptr){
+            server.stat_active_defrag_misses++;
+            return NULL;
+        }
+        memcpy(newptr, ptr, size);
+        zfree_no_tcache(ptr);
+        return newptr;
+    }
+    server.stat_active_defrag_misses++;
+    return NULL;
+}
 
 /* Defrag helper for generic allocations.
  *
  * returns NULL in case the allocatoin wasn't moved.
  * when it returns a non-null value, the old pointer was already released
  * and should NOT be accessed. */
-void* activeDefragAlloc(void *ptr) {
+void* activeDefragAlloc_2(void *ptr) {
     int bin_util, run_util;
     size_t size;
     void *newptr;
