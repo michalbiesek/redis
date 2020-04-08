@@ -55,6 +55,12 @@
 #error "Newer version of jemalloc required"
 #endif
 
+#elif defined(USE_MEMKIND)
+#define ZMALLOC_LIB "memkind"
+#include <memkind.h>
+#define HAVE_MALLOC_SIZE 1
+#define zmalloc_size(p) memkind_malloc_usable_size(NULL, p)
+
 #elif defined(__APPLE__)
 #include <malloc/malloc.h>
 #define HAVE_MALLOC_SIZE 1
@@ -75,6 +81,9 @@
  * the ability to return per-allocation fragmentation hints. */
 #if defined(USE_JEMALLOC) && defined(JEMALLOC_FRAG_HINT)
 #define HAVE_DEFRAG
+#endif
+#if defined(USE_MEMKIND)
+#define HAVE_DEFRAG_MEMKIND
 #endif
 
 void *zmalloc(size_t size);
