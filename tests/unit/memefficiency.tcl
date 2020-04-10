@@ -98,6 +98,18 @@ start_server {tags {"defrag"}} {
                     fail "defrag didn't stop."
                 }
 
+                # MOJA ZMIANA
+                #for { set j 0} {$j < 500} {incr j} {
+                #    puts [r info memory]
+                #    after 100
+                #    if { [s active_defrag_running] eq 0} {
+                #        puts [r info memory]
+                #        puts "iteracja $j"
+                #        break
+                #    }
+                #}
+                # MOJA ZMIANA
+
                 # test the the fragmentation is lower
                 after 120 ;# serverCron only updates the info once in 100ms
                 set frag [s allocator_frag_ratio]
