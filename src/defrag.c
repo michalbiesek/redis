@@ -971,12 +971,13 @@ float getAllocatorFragmentation(size_t *out_frag_bytes) {
     size_t resident, active, allocated;
     zmalloc_get_allocator_info(&allocated, &active, &resident);
     float frag_pct = ((float)active / allocated)*100 - 100;
+    serverLog(LL_VERBOSE,"MICHAL TEST active=%zu, allocated=%zu, frag=%.0f%%", active, allocated, frag_pct);
     size_t frag_bytes = active - allocated;
     float rss_pct = ((float)resident / allocated)*100 - 100;
     size_t rss_bytes = resident - allocated;
     if(out_frag_bytes)
         *out_frag_bytes = frag_bytes;
-    serverLog(LL_DEBUG,
+    serverLog(LL_VERBOSE,
         "allocated=%zu, active=%zu, resident=%zu, frag=%.0f%% (%.0f%% rss), frag_bytes=%zu (%zu rss)",
         allocated, active, resident, frag_pct, rss_pct, frag_bytes, rss_bytes);
     return frag_pct;
@@ -1095,8 +1096,12 @@ void computeDefragCycles() {
     float frag_pct = getAllocatorFragmentation(&frag_bytes);
     /* If we're not already running, and below the threshold, exit. */
     if (!server.active_defrag_running) {
-        if(frag_pct < server.active_defrag_threshold_lower || frag_bytes < server.active_defrag_ignore_bytes)
+        if(frag_pct < server.active_defrag_threshold_lower || frag_bytes < server.active_defrag_ignore_bytes) {
+            serverLog(LL_VERBOSE,
+                "computeDefragCycles first return, frag=%.0f%%, threshold_lower=%d%% frag_bytes=%zu, ignore_bytes=%zu",
+            frag_pct, server.active_defrag_threshold_lower, frag_bytes, server.active_defrag_ignore_bytes);
             return;
+        }
     }
 
     /* Calculate the adaptive aggressiveness of the defrag */
@@ -1116,6 +1121,11 @@ void computeDefragCycles() {
         server.active_defrag_running = cpu_pct;
         serverLog(LL_VERBOSE,
             "Starting active defrag, frag=%.0f%%, frag_bytes=%zu, cpu=%d%%",
+            frag_pct, frag_bytes, cpu_pct);
+    }
+    else {
+        serverLog(LL_VERBOSE,
+            "computeDefragCycles, frag=%.0f%%, frag_bytes=%zu, cpu=%d%%",
             frag_pct, frag_bytes, cpu_pct);
     }
 }
