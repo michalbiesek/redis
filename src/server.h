@@ -1634,6 +1634,7 @@ size_t getStringObjectSdsUsedMemory(robj *o);
 void freeClientReplyValue(void *o);
 void freeClientDRAMReplyValue(void *o);
 void *dupClientReplyValue(void *o);
+void *dupClientReplyValueDRAM(void *o);
 void getClientsMaxBuffers(unsigned long *longest_output_list,
                           unsigned long *biggest_input_buffer);
 char *getClientPeerId(client *client);

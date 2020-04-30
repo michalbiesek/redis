@@ -64,6 +64,13 @@ void *dupClientReplyValue(void *o) {
     return buf;
 }
 
+void *dupClientReplyValueDRAM(void *o) {
+    clientReplyBlock *old = o;
+    clientReplyBlock *buf = zmalloc_dram(sizeof(clientReplyBlock) + old->size);
+    memcpy(buf, o, sizeof(clientReplyBlock) + old->size);
+    return buf;
+}
+
 void freeClientReplyValue(void *o) {
     zfree(o);
 }
@@ -141,7 +148,7 @@ client *createClient(connection *conn) {
     c->reply_bytes = 0;
     c->obuf_soft_limit_reached_time = 0;
     listSetFreeMethod(c->reply,freeClientDRAMReplyValue);
-    listSetDupMethod(c->reply,dupClientReplyValue);
+    listSetDupMethod(c->reply,dupClientReplyValueDRAM);
     c->btype = BLOCKED_NONE;
     c->bpop.timeout = 0;
     c->bpop.keys = dictCreate(&objectKeyHeapPointerValueDictType,NULL);
