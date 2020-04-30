@@ -68,6 +68,10 @@ void freeClientReplyValue(void *o) {
     zfree(o);
 }
 
+void freeClientDRAMReplyValue(void *o) {
+    zfree_dram(o);
+}
+
 int listMatchObjects(void *a, void *b) {
     return equalStringObjects(a,b);
 }
@@ -136,7 +140,7 @@ client *createClient(connection *conn) {
     c->reply = listCreateDRAM();
     c->reply_bytes = 0;
     c->obuf_soft_limit_reached_time = 0;
-    listSetFreeMethod(c->reply,freeClientReplyValue);
+    listSetFreeMethod(c->reply,freeClientDRAMReplyValue);
     listSetDupMethod(c->reply,dupClientReplyValue);
     c->btype = BLOCKED_NONE;
     c->bpop.timeout = 0;
