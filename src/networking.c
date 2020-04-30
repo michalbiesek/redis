@@ -966,7 +966,7 @@ void acceptUnixHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
 static void freeClientArgv(client *c) {
     int j;
     for (j = 0; j < c->argc; j++)
-        decrRefCount(c->argv[j]);
+        decrRefCountDRAM(c->argv[j]);
     c->argc = 0;
     c->cmd = NULL;
 }
@@ -2517,7 +2517,7 @@ void rewriteClientCommandArgument(client *c, int i, robj *newval) {
     robj *oldval;
 
     if (i >= c->argc) {
-        c->argv = zrealloc(c->argv,sizeof(robj*)*(i+1));
+        c->argv = zrealloc_dram(c->argv,sizeof(robj*)*(i+1));
         c->argc = i+1;
         c->argv[i] = NULL;
     }

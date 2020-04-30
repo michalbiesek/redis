@@ -373,6 +373,10 @@ void decrRefCount(robj *o) {
     _decrRefCount(o, 1);
 }
 
+void decrRefCountDRAM(robj *o) {
+    _decrRefCount(o, 0);
+}
+
 /* This variant of decrRefCount() gets its argument as void, and is useful
  * as free method in data structures that expect a 'void free_object(void*)'
  * prototype for the free method. */
