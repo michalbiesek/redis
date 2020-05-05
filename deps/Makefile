@@ -79,7 +79,7 @@ lua: .make-prerequisites
 pmdk: .make-prerequisites
 	./update-pmdk.sh
 	@printf '%b %b\n' $(MAKECOLOR)MAKE$(ENDCOLOR) $(BINCOLOR)$@$(ENDCOLOR)
-	cd pmdk && $(MAKE)
+	cd pmdk && $(MAKE) EXTRA_CFLAGS="-Wno-error"
 
 .PHONY: pmdk
 
