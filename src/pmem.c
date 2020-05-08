@@ -29,6 +29,15 @@
  */
 #include "server.h"
 
+#if defined(USE_MEMKIND)
+#include <libpmemlog.h>
+#endif
+
+
+#define AOFGUARD_NVM_SIZE  (512 << 20)
+#define POOL_SIZE ((size_t)(1 << 30))
+#define POOL_SIZE_2 ((size_t)AOFGUARD_NVM_SIZE)
+
 #include <math.h>
 #include <stdio.h>
 
@@ -98,3 +107,70 @@ void adjustPmemThresholdCycle(void) {
         }
     }
 }
+
+
+#if defined(USE_MEMKIND)
+int pmemCopyLog(void* src, void* dest)
+{
+    (void)src;
+    (void)dest;
+    return 0;
+}
+
+int pmemLogWrite(void* pmem_log, const void* data, size_t len){
+    return pmemlog_append(pmem_log, data, len);
+}
+
+int pmemLogDeInit(void* log)
+{
+    pmemlog_close(log);
+    return 0;
+}
+
+void* pmemLogInit(const char* path, int reset)
+{
+    PMEMlogpool *plp = pmemlog_create(path, POOL_SIZE_2, 0666);
+
+    if (plp == NULL) {
+        plp = pmemlog_open(path);
+        if (plp == NULL) {
+            perror(path);
+            exit(1);
+        }
+    }
+
+    if (reset) {
+        pmemlog_rewind(plp);
+    }
+    return plp;
+}
+#else
+int pmemCopyLog(void* src, void* dest)
+{
+    (void)src;
+    (void)dest;
+    return 0;
+}
+
+int pmemLogWrite(void* pmem_log, const void* data, size_t len)
+{
+    (void)pmem_log;
+    (void)data;
+    (void)len;
+    return 0;
+}
+
+int pmemLogDeInit(void* log)
+{
+    (void)log;
+    return 0;
+}
+
+void* pmemLogInit(const char* path, int reset)
+{
+    (void)path;
+    (void)reset;
+    return NULL;
+}
+#endif
+

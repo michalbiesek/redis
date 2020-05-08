@@ -2176,6 +2176,10 @@ void dictSdsDestructor(void *privdata, void *val);
 /* pmem.c - Handling Persistent Memory */
 void pmemThresholdInit(void);
 void adjustPmemThresholdCycle(void);
+void* pmemLogInit(const char* path, int reset);
+int pmemLogWrite(void* pmem_log, const void* data, size_t len);
+int pmemLogDeInit(void* log);
+int pmemCopyLog(void* src, void* dest);
 
 /* Git SHA1 */
 char *redisGitSHA1(void);
