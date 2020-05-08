@@ -2871,6 +2871,13 @@ void initServer(void) {
                 strerror(errno));
             exit(1);
         }
+        if (server.aof_pmem) {
+            server.aof_pmem_struct = pmemLogInit(server.aof_pmem_path, 0);
+            if (server.aof_pmem_struct == NULL) {
+                serverLog(LL_WARNING, "pmemlog_init() failed");
+                exit(1);
+            }
+        }
     }
 
     /* 32 bit instances are limited to 4GB of address space, so if there is
