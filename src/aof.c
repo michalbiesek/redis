@@ -391,7 +391,16 @@ void flushAppendOnlyFile(int force) {
     }
 
     latencyStartMonitor(latency);
-    nwritten = aofWrite(server.aof_fd,server.aof_buf,sdslen(server.aof_buf));
+    if(server.aof_pmem) {
+        size_t aof_buf_len = sdslen(server.aof_buf);
+        if (pmemLogWrite(server.aof_pmem_path, server.aof_buf, aof_buf_len)) {
+            serverLog(LL_WARNING, "pmemLogWrite %zu failed!", aof_buf_len);
+            exit(1);
+        }
+        nwritten = aof_buf_len;
+    } else {
+        nwritten = aofWrite(server.aof_fd,server.aof_buf,sdslen(server.aof_buf));
+    }
     latencyEndMonitor(latency);
     /* We want to capture different events for delayed writes:
      * when the delay happens with a pending fsync, or with a saving child
@@ -1791,6 +1800,14 @@ void backgroundRewriteDoneHandler(int exitcode, int bysignal) {
         /* Change state from WAIT_REWRITE to ON if needed */
         if (server.aof_state == AOF_WAIT_REWRITE)
             server.aof_state = AOF_ON;
+
+        if (server.aof_pmem) {
+            bioCreateBackgroundJob(BIO_DEINIT_PMEMLOG, server.aof_pmem_struct, NULL, NULL);
+            if (pmemLogInit(server.aof_pmem_path, 1)) {
+                serverLog(LL_WARNING, "pmemLogInit() for background job failed" );
+                exit(1);
+            }
+        }
 
         /* Asynchronously close the overwritten AOF. */
         if (oldfd != -1) bioCreateBackgroundJob(BIO_CLOSE_FILE,(void*)(long)oldfd,NULL,NULL);

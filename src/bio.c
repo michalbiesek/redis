@@ -199,6 +199,11 @@ void *bioProcessBackgroundJobs(void *arg) {
                 lazyfreeFreeDatabaseFromBioThread(job->arg2,job->arg3);
             else if (job->arg3)
                 lazyfreeFreeSlotsMapFromBioThread(job->arg3);
+        } else if(type == BIO_DEINIT_PMEMLOG) {
+            if (pmemLogDeInit(job->arg1)) {
+                serverLog(LL_WARNING, "pmemLogDeInit() failed!");
+                exit(1);
+            }
         } else {
             serverPanic("Wrong job type in bioProcessBackgroundJobs().");
         }
