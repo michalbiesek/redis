@@ -1194,6 +1194,10 @@ struct redisServer {
     int aof_last_write_errno;       /* Valid if aof_last_write_status is ERR */
     int aof_load_truncated;         /* Don't stop on unexpected AOF EOF. */
     int aof_use_rdb_preamble;       /* Use RDB preamble on AOF rewrites. */
+    int aof_pmem;                   /* Use AOF using Persistent Memory. */
+    char *aof_pmem_filename_path;   /* AOF persistent memory path filename. */
+    void *aof_pmem_log;             /* AOF persistent memory log. */
+    size_t aof_pmem_max_size;       /* AOF persistent max size. */
     /* AOF pipes used to communicate between parent and child during rewrite. */
     int aof_pipe_write_data_to_child;
     int aof_pipe_read_data_from_parent;
@@ -2176,6 +2180,16 @@ void dictSdsDestructor(void *privdata, void *val);
 /* pmem.c - Handling Persistent Memory */
 void pmemThresholdInit(void);
 void adjustPmemThresholdCycle(void);
+void* pmemLogInit(const char* path, size_t size);
+void* pmemLogOpen(const char* path);
+int pmemLogcheck(const char* path);
+int pmemLogWrite(void* log, const void* data, size_t len);
+void pmemLogDeInit(void* log);
+void pmemCopyLog(void* src, int fd);
+void pmemLogReset(void* log);
+size_t pmemLogCurrentSize(void* log);
+size_t pmemLogMaxSize(void* log);
+ssize_t pmemLogWriteToAof(void* log, const void* data, size_t len, int fd);
 
 /* Git SHA1 */
 char *redisGitSHA1(void);

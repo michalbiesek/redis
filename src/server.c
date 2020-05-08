@@ -2871,6 +2871,18 @@ void initServer(void) {
                 strerror(errno));
             exit(1);
         }
+        if ((server.aof_pmem) && (server.aof_state == AOF_FSYNC_ALWAYS)) {
+            if (pmemLogcheck(server.aof_pmem_filename_path) == 1) {
+                server.aof_pmem_log = pmemLogOpen(server.aof_pmem_filename_path);
+                pmemCopyLog(server.aof_pmem_log, server.aof_fd);
+            } else {
+                server.aof_pmem_log = pmemLogInit(server.aof_pmem_filename_path, server.aof_pmem_max_size);
+                if (server.aof_pmem_log == NULL) {
+                    serverLog(LL_WARNING, "pmemlog_init() failed");
+                    exit(1);
+                }
+            }
+        }
     }
 
     /* 32 bit instances are limited to 4GB of address space, so if there is
@@ -3634,6 +3646,12 @@ int prepareForShutdown(int flags) {
             serverLog(LL_WARNING,
                 "There is a child rewriting the AOF. Killing it!");
             killAppendOnlyChild();
+        }
+        if ((server.aof_pmem) && (server.aof_state == AOF_FSYNC_ALWAYS)) {
+            serverLog(LL_NOTICE,"Flush pmem log file.");
+            pmemCopyLog(server.aof_pmem_log, server.aof_fd);
+            pmemLogDeInit(server.aof_pmem_log);
+            server.aof_pmem_log = NULL;
         }
         /* Append only file: flush buffers and fsync() the AOF at exit */
         serverLog(LL_NOTICE,"Calling fsync() on the AOF file.");

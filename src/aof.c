@@ -235,6 +235,12 @@ void killAppendOnlyChild(void) {
  * at runtime using the CONFIG command. */
 void stopAppendOnly(void) {
     serverAssert(server.aof_state != AOF_OFF);
+    if ((server.aof_pmem) && (server.aof_state == AOF_FSYNC_ALWAYS)) {
+        pmemCopyLog(server.aof_pmem_log, server.aof_fd);
+        pmemLogReset(server.aof_pmem_log);
+        pmemLogDeInit(server.aof_pmem_log);
+        server.aof_pmem_log = NULL;
+    }
     flushAppendOnlyFile(1);
     redis_fsync(server.aof_fd);
     close(server.aof_fd);
@@ -391,7 +397,12 @@ void flushAppendOnlyFile(int force) {
     }
 
     latencyStartMonitor(latency);
-    nwritten = aofWrite(server.aof_fd,server.aof_buf,sdslen(server.aof_buf));
+    if ((server.aof_pmem) && (server.aof_state == AOF_FSYNC_ALWAYS)) {
+        nwritten = pmemLogWriteToAof(server.aof_pmem_log, server.aof_buf, sdslen(server.aof_buf),server.aof_fd);
+    }
+    else {
+        nwritten = aofWrite(server.aof_fd,server.aof_buf,sdslen(server.aof_buf));
+    }
     latencyEndMonitor(latency);
     /* We want to capture different events for delayed writes:
      * when the delay happens with a pending fsync, or with a saving child
@@ -410,7 +421,7 @@ void flushAppendOnlyFile(int force) {
     /* We performed the write so reset the postponed flush sentinel to zero. */
     server.aof_flush_postponed_start = 0;
 
-    if (nwritten != (ssize_t)sdslen(server.aof_buf)) {
+    if (nwritten != (ssize_t)sdslen(server.aof_buf) && (!server.aof_pmem)) {
         static time_t last_write_error_log = 0;
         int can_log = 0;
 

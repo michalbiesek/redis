@@ -98,3 +98,127 @@ void adjustPmemThresholdCycle(void) {
         }
     }
 }
+
+#if defined(USE_MEMKIND)
+#include <libpmemlog.h>
+static int
+process_chunk(const void *buf, size_t len, void *arg) {
+    int* fd = (int*)arg;
+    if (write(*fd, buf, len) >= 0) {
+        return 0;
+    }else {
+        return 1;
+    }
+}
+
+int pmemLogWrite(void* log, const void* data, size_t len) {
+    return pmemlog_append(log, data, len);
+}
+
+void pmemLogDeInit(void* log) {
+    pmemlog_close(log);
+}
+
+void pmemLogReset(void* log) {
+    pmemlog_rewind(log);
+}
+
+size_t pmemLogCurrentSize(void* log) {
+    return (size_t)pmemlog_tell(log);
+}
+
+void pmemCopyLog(void* src, int fd) {
+    pmemlog_walk(src, 0, process_chunk, (void*)&fd);
+}
+
+int pmemLogcheck(const char* path) {
+    return pmemlog_check(path);
+}
+
+void* pmemLogInit(const char* path, size_t size) {
+    return pmemlog_create(path, size, 0666);
+}
+
+void* pmemLogOpen(const char* path) {
+    return pmemlog_open(path);
+}
+
+ssize_t pmemLogWriteToAof(void* log, const void* data, size_t len, int fd) {
+    size_t current_size = pmemLogCurrentSize(log);
+    if (current_size + len < pmemLogMaxSize(log)) {
+        if(!pmemLogWrite(log, data, len)) {
+            return 0;
+        } else {
+            return -1;
+        }
+     } else {
+        pmemCopyLog(log, fd);
+        pmemLogReset(log);
+        if(!pmemLogWrite(log, data, len)) {
+            return (ssize_t)current_size;
+        } else {
+            return -1;
+        }
+     }
+}
+
+size_t pmemLogMaxSize(void* log) {
+    return pmemlog_nbyte(log);
+}
+#else
+
+ssize_t pmemLogWriteToAof(void* log, const void* data, size_t len, int fd) {
+    (void)log;
+    (void)data;
+    (void)len;
+    (void)fd;
+    return 0;
+}
+
+int pmemLogWrite(void* log, const void* data, size_t len) {
+    (void)log;
+    (void)data;
+    (void)len;
+    return 0;
+}
+
+void pmemLogDeInit(void* log) {
+    (void)log;
+}
+
+void pmemLogReset(void* log) {
+    (void)log;
+}
+
+void pmemCopyLog(void* src, int fd) {
+    (void)src;
+    (void)fd;
+}
+
+size_t pmemLogCurrentSize(void* log) {
+    (void)log;
+    return 0;
+}
+
+size_t pmemLogMaxSize(void* log) {
+    (void)log;
+    return 0;
+}
+
+int pmemLogcheck(const char* path) {
+    (void)path;
+    return 0;
+}
+
+void* pmemLogOpen(const char* path) {
+    (void)path;
+    return NULL;
+}
+
+void* pmemLogInit(const char* path, size_t size) {
+    (void)path;
+    (void)size;
+    return NULL;
+}
+#endif
+
