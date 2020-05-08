@@ -182,7 +182,7 @@ endif
 ifeq ($(MALLOC),jemalloc)
 	DEPENDENCY_TARGETS+= jemalloc
 	FINAL_CFLAGS+= -DUSE_JEMALLOC -I../deps/jemalloc/include
-	FINAL_LIBS := ../deps/jemalloc/lib/libjemalloc.a $(FINAL_LIBS)
+	FINAL_LIBS := ../deps/jemalloc/lib/libjemalloc.a $(FINAL_LIBS) -lpmemlog -lpmem
 endif
 
 ifeq ($(BUILD_TLS),yes)
@@ -193,7 +193,7 @@ endif
 
 ifeq ($(MALLOC),memkind)
 	FINAL_CFLAGS+= -DUSE_MEMKIND
-	FINAL_LIBS+= -lmemkind -ldaxctl
+	FINAL_LIBS+= -lmemkind -ldaxctl -lpmemlog -lpmem
 endif
 
 REDIS_CC=$(QUIET_CC)$(CC) $(FINAL_CFLAGS)
