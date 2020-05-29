@@ -2015,6 +2015,7 @@ void initServer(void) {
     slowlogInit();
     latencyMonitorInit();
     pmemThresholdInit();
+    dictSetAllocPolicy(server.hashtable_on_dram);
     bioInit();
 }
 

@@ -1822,7 +1822,7 @@ int rewriteConfig(char *path) {
 
     /* Step 2: rewrite every single option, replacing or appending it inside
      * the rewrite state. */
-
+ 
     rewriteConfigYesNoOption(state,"daemonize",server.daemonize,0);
     rewriteConfigStringOption(state,"pidfile",server.pidfile,CONFIG_DEFAULT_PID_FILE);
     rewriteConfigNumericalOption(state,"port",server.port,CONFIG_DEFAULT_SERVER_PORT);
