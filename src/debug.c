@@ -297,7 +297,7 @@ void computeDatasetDigest(unsigned char *final) {
     }
 }
 
-#ifdef USE_JEMALLOC
+#if defined(USE_JEMALLOC)
 void mallctl_int(client *c, robj **argv, int argc) {
     int ret;
     /* start with the biggest size (int64), and if that fails, try smaller sizes (int32, bool) */
@@ -365,6 +365,74 @@ void mallctl_string(client *c, robj **argv, int argc) {
     else
         addReply(c, shared.ok);
 }
+#elif defined(USE_MEMKIND)
+void mallctl_int(client *c, robj **argv, int argc) {
+    int ret;
+    /* start with the biggest size (int64), and if that fails, try smaller sizes (int32, bool) */
+    int64_t old = 0, val;
+    if (argc > 1) {
+        long long ll;
+        if (getLongLongFromObjectOrReply(c, argv[1], &ll, NULL) != C_OK)
+            return;
+        val = ll;
+    }
+    size_t sz = sizeof(old);
+    while (sz > 0) {
+        if ((ret=memkind_mallctl(argv[0]->ptr, &old, &sz, argc > 1? &val: NULL, argc > 1?sz: 0))) {
+            if (ret == EPERM && argc > 1) {
+                /* if this option is write only, try just writing to it. */
+                if (!(ret=memkind_mallctl(argv[0]->ptr, NULL, 0, &val, sz))) {
+                    addReply(c, shared.ok);
+                    return;
+                }
+            }
+            if (ret==EINVAL) {
+                /* size might be wrong, try a smaller one */
+                sz /= 2;
+#if BYTE_ORDER == BIG_ENDIAN
+                val <<= 8*sz;
+#endif
+                continue;
+            }
+            addReplyErrorFormat(c,"%s", strerror(ret));
+            return;
+        } else {
+#if BYTE_ORDER == BIG_ENDIAN
+            old >>= 64 - 8*sz;
+#endif
+            addReplyLongLong(c, old);
+            return;
+        }
+    }
+    addReplyErrorFormat(c,"%s", strerror(EINVAL));
+}
+
+void mallctl_string(client *c, robj **argv, int argc) {
+    int rret, wret;
+    char *old;
+    size_t sz = sizeof(old);
+    /* for strings, it seems we need to first get the old value, before overriding it. */
+    if ((rret=memkind_mallctl(argv[0]->ptr, &old, &sz, NULL, 0))) {
+        /* return error unless this option is write only. */
+        if (!(rret == EPERM && argc > 1)) {
+            addReplyErrorFormat(c,"%s", strerror(rret));
+            return;
+        }
+    }
+    if(argc > 1) {
+        char *val = argv[1]->ptr;
+        char **valref = &val;
+        if ((!strcmp(val,"VOID")))
+            valref = NULL, sz = 0;
+        wret = memkind_mallctl(argv[0]->ptr, NULL, 0, valref, sz);
+    }
+    if (!rret)
+        addReplyBulkCString(c, old);
+    else if (wret)
+        addReplyErrorFormat(c,"%s", strerror(wret));
+    else
+        addReply(c, shared.ok);
+}
 #endif
 
 void debugCommand(client *c) {
@@ -396,7 +464,7 @@ void debugCommand(client *c) {
 "STRUCTSIZE -- Return the size of different Redis core C structures.",
 "ZIPLIST <key> -- Show low level info about the ziplist encoding.",
 "STRINGMATCH-TEST -- Run a fuzz tester against the stringmatchlen() function.",
-#ifdef USE_JEMALLOC
+#if defined(USE_JEMALLOC) || defined(USE_MEMKIND)
 "MALLCTL <key> [<val>] -- Get or set a malloc tunning integer.",
 "MALLCTL-STR <key> [<val>] -- Get or set a malloc tunning string.",
 #endif
@@ -791,7 +859,7 @@ NULL
     {
         stringmatchlen_fuzz_test();
         addReplyStatus(c,"Apparently Redis did not crash: test passed");
-#ifdef USE_JEMALLOC
+#if defined(USE_JEMALLOC) || defined(USE_MEMKIND)
     } else if(!strcasecmp(c->argv[1]->ptr,"mallctl") && c->argc >= 3) {
         mallctl_int(c, c->argv+2, c->argc-2);
         return;
