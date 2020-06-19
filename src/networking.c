@@ -77,7 +77,7 @@ client *createClient(int fd) {
             readQueryFromClient, c) == AE_ERR)
         {
             close(fd);
-            zfree(c);
+            zfree_dram(c);
             return NULL;
         }
     }
