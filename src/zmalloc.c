@@ -44,7 +44,7 @@ void zlibc_free(void *ptr) {
 #include <pthread.h>
 #include "config.h"
 #include "zmalloc.h"
-
+#include "atomicvar.h"
 #ifdef HAVE_MALLOC_SIZE
 #define PREFIX_SIZE (0)
 #else
@@ -77,42 +77,6 @@ void zlibc_free(void *ptr) {
 #define realloc_pmem(ptr,size) memkind_realloc(MEMKIND_DAX_KMEM,ptr,size)
 #define free_dram(ptr) memkind_free(MEMKIND_DEFAULT,ptr)
 #define free_pmem(ptr) memkind_free(MEMKIND_DAX_KMEM,ptr)
-#endif
-
-#if defined(__ATOMIC_RELAXED)
-#define update_zmalloc_stat_add(__n) __atomic_add_fetch(&used_memory, (__n), __ATOMIC_RELAXED)
-#define update_zmalloc_pmem_stat_add(__n) __atomic_add_fetch(&used_pmem_memory, (__n), __ATOMIC_RELAXED)
-#define update_zmalloc_stat_sub(__n) __atomic_sub_fetch(&used_memory, (__n), __ATOMIC_RELAXED)
-#define update_zmalloc_pmem_stat_sub(__n) __atomic_sub_fetch(&used_pmem_memory, (__n), __ATOMIC_RELAXED)
-#elif defined(HAVE_ATOMIC)
-#define update_zmalloc_stat_add(__n) __sync_add_and_fetch(&used_memory, (__n))
-#define update_zmalloc_pmem_stat_add(__n) __sync_add_and_fetch(&used_pmem_memory, (__n))
-#define update_zmalloc_stat_sub(__n) __sync_sub_and_fetch(&used_memory, (__n))
-#define update_zmalloc_pmem_stat_sub(__n) __sync_sub_and_fetch(&used_pmem_memory, (__n))
-#else
-#define update_zmalloc_stat_add(__n) do { \
-    pthread_mutex_lock(&used_memory_mutex); \
-    used_memory += (__n); \
-    pthread_mutex_unlock(&used_memory_mutex); \
-} while(0)
-
-#define update_zmalloc_pmem_stat_add(__n) do { \
-    pthread_mutex_lock(&used_pmem_memory_mutex); \
-    used_pmem_memory += (__n); \
-    pthread_mutex_unlock(&used_pmem_memory_mutex); \
-} while(0)
-
-#define update_zmalloc_stat_sub(__n) do { \
-    pthread_mutex_lock(&used_memory_mutex); \
-    used_memory -= (__n); \
-    pthread_mutex_unlock(&used_memory_mutex); \
-} while(0)
-
-#define update_zmalloc_pmem_stat_sub(__n) do { \
-    pthread_mutex_lock(&used_pmem_memory_mutex); \
-    used_pmem_memory -= (__n); \
-    pthread_mutex_unlock(&used_pmem_memory_mutex); \
-} while(0)
 #endif
 
 #ifndef USE_MEMKIND
@@ -157,47 +121,30 @@ static void *zrealloc_pmem(void *ptr, size_t size) {
 #define update_zmalloc_stat_alloc(__n) do { \
     size_t _n = (__n); \
     if (_n&(sizeof(long)-1)) _n += sizeof(long)-(_n&(sizeof(long)-1)); \
-    if (zmalloc_thread_safe) { \
-        update_zmalloc_stat_add(_n); \
-    } else { \
-        used_memory += _n; \
-    } \
+    atomicIncr(used_memory,__n); \
 } while(0)
 
 #define update_zmalloc_pmem_stat_alloc(__n) do { \
     size_t _n = (__n); \
     if (_n&(sizeof(long)-1)) _n += sizeof(long)-(_n&(sizeof(long)-1)); \
-    if (zmalloc_thread_safe) { \
-        update_zmalloc_pmem_stat_add(_n); \
-    } else { \
-        used_pmem_memory += _n; \
-    } \
+    atomicIncr(used_pmem_memory,__n); \
 } while(0)
 
 #define update_zmalloc_stat_free(__n) do { \
     size_t _n = (__n); \
     if (_n&(sizeof(long)-1)) _n += sizeof(long)-(_n&(sizeof(long)-1)); \
-    if (zmalloc_thread_safe) { \
-        update_zmalloc_stat_sub(_n); \
-    } else { \
-        used_memory -= _n; \
-    } \
+    atomicDecr(used_memory,__n); \
 } while(0)
 
 #define update_zmalloc_pmem_stat_free(__n) do { \
     size_t _n = (__n); \
     if (_n&(sizeof(long)-1)) _n += sizeof(long)-(_n&(sizeof(long)-1)); \
-    if (zmalloc_thread_safe) { \
-        update_zmalloc_pmem_stat_sub(_n); \
-    } else { \
-        used_pmem_memory -= _n; \
-    } \
+    atomicDecr(used_pmem_memory,__n); \
 } while(0)
 
 static size_t pmem_threshold = UINT_MAX;
 static size_t used_memory = 0;
 static size_t used_pmem_memory = 0;
-static int zmalloc_thread_safe = 0;
 pthread_mutex_t used_memory_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t used_pmem_memory_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -420,44 +367,14 @@ char *zstrdup(const char *s) {
 
 size_t zmalloc_used_memory(void) {
     size_t um;
-
-    if (zmalloc_thread_safe) {
-#if defined(__ATOMIC_RELAXED) || defined(HAVE_ATOMIC)
-        um = update_zmalloc_stat_add(0);
-#else
-        pthread_mutex_lock(&used_memory_mutex);
-        um = used_memory;
-        pthread_mutex_unlock(&used_memory_mutex);
-#endif
-    }
-    else {
-        um = used_memory;
-    }
-
+    atomicGet(used_memory,um);
     return um;
 }
 
 size_t zmalloc_used_pmem_memory(void) {
     size_t um;
-
-    if (zmalloc_thread_safe) {
-#if defined(__ATOMIC_RELAXED) || defined(HAVE_ATOMIC)
-        um = update_zmalloc_pmem_stat_add(0);
-#else
-        pthread_mutex_lock(&used_pmem_memory_mutex);
-        um = used_pmem_memory;
-        pthread_mutex_unlock(&used_pmem_memory_mutex);
-#endif
-    }
-    else {
-        um = used_pmem_memory;
-    }
-
+    atomicGet(used_pmem_memory,um);
     return um;
-}
-
-void zmalloc_enable_thread_safeness(void) {
-    zmalloc_thread_safe = 1;
 }
 
 void zmalloc_set_oom_handler(void (*oom_handler)(size_t)) {

@@ -4016,7 +4016,6 @@ int main(int argc, char **argv) {
     spt_init(argc, argv);
 #endif
     setlocale(LC_COLLATE,"");
-    zmalloc_enable_thread_safeness();
     zmalloc_set_oom_handler(redisOutOfMemoryHandler);
     srand(time(NULL)^getpid());
     gettimeofday(&tv,NULL);
