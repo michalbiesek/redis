@@ -487,11 +487,19 @@ float zmalloc_get_fragmentation_ratio(size_t rss) {
  * Example: zmalloc_get_smap_bytes_by_field("Rss:");
  */
 #if defined(HAVE_PROC_SMAPS)
-size_t zmalloc_get_smap_bytes_by_field(char *field) {
+size_t zmalloc_get_smap_bytes_by_field(char *field, long pid) { 
     char line[1024];
     size_t bytes = 0;
-    FILE *fp = fopen("/proc/self/smaps","r");
     int flen = strlen(field);
+    FILE *fp;
+
+    if (pid == -1) {
+        fp = fopen("/proc/self/smaps","r");
+    } else {
+        char filename[128];
+        snprintf(filename,sizeof(filename),"/proc/%ld/smaps",pid);
+        fp = fopen(filename,"r");
+    }
 
     if (!fp) return 0;
     while(fgets(line,sizeof(line),fp) != NULL) {
@@ -507,14 +515,36 @@ size_t zmalloc_get_smap_bytes_by_field(char *field) {
     return bytes;
 }
 #else
-size_t zmalloc_get_smap_bytes_by_field(char *field) {
-    ((void) field);
+/* Get sum of the specified field from libproc api call.
+ * As there are per page value basis we need to convert
+ * them accordingly.
+ *
+ * Note that AnonHugePages is a no-op as THP feature
+ * is not supported in this platform
+ */
+size_t zmalloc_get_smap_bytes_by_field(char *field, long pid) {
+#if defined(__APPLE__)
+    struct proc_regioninfo pri;
+    if (proc_pidinfo(pid, PROC_PIDREGIONINFO, 0, &pri, PROC_PIDREGIONINFO_SIZE) == PROC_PIDREGIONINFO_SIZE) {
+        if (!strcmp(field, "Private_Dirty:")) {
+                return (size_t)pri.pri_pages_dirtied * 4096;
+        } else if (!strcmp(field, "Rss:")) {
+                return (size_t)pri.pri_pages_resident * 4096;
+        } else if (!strcmp(field, "AnonHugePages:")) {
+                return 0;
+        }
+    }
     return 0;
+#endif
+    ((void) field);
+    ((void) pid);
+    return 0;
+}
 }
 #endif
 
-size_t zmalloc_get_private_dirty(void) {
-    return zmalloc_get_smap_bytes_by_field("Private_Dirty:");
+size_t zmalloc_get_private_dirty(long pid) {
+    return zmalloc_get_smap_bytes_by_field("Private_Dirty:", pid);
 }
 
 /* Returns the size of physical memory (RAM) in bytes.
