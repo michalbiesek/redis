@@ -232,6 +232,10 @@ static void *zrealloc_pmem(void *ptr, size_t size) {
     size_t oldsize;
     void *newptr;
 
+    if (size == 0 && ptr != NULL) {
+        zfree_pmem(ptr);
+        return NULL;
+    }
     if (ptr == NULL) return zmalloc(size);
 #ifdef HAVE_MALLOC_SIZE
     oldsize = zmalloc_size(ptr);
@@ -284,6 +288,10 @@ void *zrealloc_dram(void *ptr, size_t size) {
     size_t oldsize;
     void *newptr;
 
+    if (size == 0 && ptr != NULL) {
+        zfree_dram(ptr);
+        return NULL;
+    }
     if (ptr == NULL) return zmalloc(size);
 #ifdef HAVE_MALLOC_SIZE
     oldsize = zmalloc_size(ptr);
