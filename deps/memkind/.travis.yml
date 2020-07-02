@@ -1,0 +1,64 @@
+dist: bionic
+language: cpp
+cache: ccache
+git:
+  depth: false
+matrix:
+  fast_finish: true
+  include:
+
+    - name: "Astyle"
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - astyle
+      script:
+        - ./astyle.sh
+
+    - name: "GCC 4.8"
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-4.8
+            - libnuma-dev
+      env:
+         - MATRIX_EVAL="CC=gcc-4.8 && CXX=g++-4.8"
+      install:
+      script:
+        - ./build.sh
+
+    - name: "GCC 8.0"
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-8
+            - libnuma-dev
+      env:
+         - MATRIX_EVAL="CC=gcc-8 && CXX=g++-8"
+      install:
+      script:
+        - ./build.sh
+
+    - name: "Clang 8"
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+            - llvm-toolchain-bionic-8
+          packages:
+            - clang-8
+            - libnuma-dev
+      env:
+        - MATRIX_EVAL="CC=clang-8 && CXX=clang++-8"
+      install:
+      script:
+        - ./build.sh
+
+before_install:
+  - eval "${MATRIX_EVAL}"
