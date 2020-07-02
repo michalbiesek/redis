@@ -5,6 +5,7 @@ should be provided by the operating system.
 * **hiredis** is the official C client library for Redis. It is used by redis-cli, redis-benchmark and Redis Sentinel. It is part of the Redis official ecosystem but is developed externally from the Redis repository, so we just upgrade it as needed.
 * **linenoise** is a readline replacement. It is developed by the same authors of Redis but is managed as a separated project and updated as needed.
 * **lua** is Lua 5.1 with minor changes for security and additional libraries.
+* **memkind** is memory allocator, used for allocation to DRAM and Persistent Memory
 
 How to upgrade the above dependencies
 ===
@@ -79,4 +80,12 @@ and our version:
 2. We have the implementation source code, and directly link to the following external libraries: `lua_cjson.o`, `lua_struct.o`, `lua_cmsgpack.o` and `lua_bit.o`.
 3. There is a security fix in `ldo.c`, line 498: The check for `LUA_SIGNATURE[0]` is removed in order toa void direct bytecode execution.
 
+Memkind
+---
 
+We use memkind v1.10.1-rc2. Library is rarely upgraded as needed. The upgrade process is trivial since
+Redis uses a non modified version of memkind, so to upgrade just do the
+following:
+
+1. Remove the memkind directory.
+2. Substitute it with the new memkind source tree.
