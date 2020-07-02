@@ -11,14 +11,11 @@ Building MemKeyDB
 --------------
 You will need to install the following required packages on the build system:
 * libdaxctl-devel (v66 or later) -- required by memkind
-* memkind ([v1.10.1-rc2](https://github.com/memkind/memkind/releases/tag/v1.10.1-rc2) or later) - with custom build options described below
 
-To install memkind please call:
+Libmemkind is one submodule of this repo, so you have to init this submodule in order to get code
 
-    % ./autogen.sh
-    % ARENA_LIMIT=1 MIN_LG_ALIGN=3 ./configure --disable-heap-manager
-    % make
-    % make install
+    % git submodule init
+    % git submodule update
 
 It is as simple as:
 
@@ -41,7 +38,7 @@ command in order to really clean everything and rebuild from scratch:
 
     make distclean
 
-This will clean: jemalloc, lua, hiredis, linenoise.
+This will clean: jemalloc, lua, hiredis, linenoise, memkind.
 
 Also if you force certain build options like 32bit target, no C compiler
 optimizations (for debugging purposes), and other similar build time options,

@@ -195,8 +195,9 @@ ifeq ($(BUILD_TLS),yes)
 endif
 
 ifeq ($(MALLOC),memkind)
-	FINAL_CFLAGS+= -DUSE_MEMKIND
-	FINAL_LIBS+= -lmemkind -ldaxctl
+	DEPENDENCY_TARGETS+= memkind
+	FINAL_CFLAGS+= -DUSE_MEMKIND -I../deps/memkind/include
+	FINAL_LIBS+= ../deps/memkind/.libs/libmemkind.a -ldaxctl -lnuma -ldl
 endif
 
 REDIS_CC=$(QUIET_CC)$(CC) $(FINAL_CFLAGS)
