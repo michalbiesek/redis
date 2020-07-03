@@ -110,7 +110,7 @@ endif
 ifeq ($(MALLOC),memkind)
     DEPENDENCY_TARGETS+= memkind
     FINAL_CFLAGS+= -DUSE_MEMKIND -I../deps/memkind/include
-    FINAL_LIBS+= ../deps/memkind/.libs/libmemkind.a -ldaxctl -lnuma
+    FINAL_LIBS+= ../deps/memkind/.libs/libmemkind.a -ldaxctl -lnuma -ldl
 endif
 
 REDIS_CC=$(QUIET_CC)$(CC) $(FINAL_CFLAGS)
