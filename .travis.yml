@@ -25,7 +25,7 @@ before script:
 
 script:
   - make gcov
-  - ./runtest --clients 2
+  - ./runtest --clients 1
 
 after_success:
   - bash <(curl -s https://codecov.io/bash) -p src
