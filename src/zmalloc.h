@@ -60,6 +60,8 @@
 #include <memkind.h>
 #define HAVE_MALLOC_SIZE 1
 #define zmalloc_size(p) memkind_malloc_usable_size(NULL, p)
+#define zmsize_default(s) memkind_usable_size(MEMKIND_DEFAULT, size)
+#define zmsize_pmem(s) memkind_usable_size(MEMKIND_DAX_KMEM, size)
 
 #elif defined(__APPLE__)
 #include <malloc/malloc.h>
