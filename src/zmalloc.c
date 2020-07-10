@@ -31,6 +31,7 @@
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 /* This function provide us access to the original libc free(). This is useful
  * for instance to free results obtained by backtrace_symbols(). We need
@@ -44,6 +45,7 @@ void zlibc_free(void *ptr) {
 #include <pthread.h>
 #include "config.h"
 #include "zmalloc.h"
+#include "atomicvar.h"
 
 #ifdef HAVE_MALLOC_SIZE
 #define PREFIX_SIZE (0)
@@ -77,42 +79,6 @@ void zlibc_free(void *ptr) {
 #define realloc_pmem(ptr,size) memkind_realloc(MEMKIND_DAX_KMEM,ptr,size)
 #define free_dram(ptr) memkind_free(MEMKIND_DEFAULT,ptr)
 #define free_pmem(ptr) memkind_free(MEMKIND_DAX_KMEM,ptr)
-#endif
-
-#if defined(__ATOMIC_RELAXED)
-#define update_zmalloc_stat_add(__n) __atomic_add_fetch(&used_memory, (__n), __ATOMIC_RELAXED)
-#define update_zmalloc_pmem_stat_add(__n) __atomic_add_fetch(&used_pmem_memory, (__n), __ATOMIC_RELAXED)
-#define update_zmalloc_stat_sub(__n) __atomic_sub_fetch(&used_memory, (__n), __ATOMIC_RELAXED)
-#define update_zmalloc_pmem_stat_sub(__n) __atomic_sub_fetch(&used_pmem_memory, (__n), __ATOMIC_RELAXED)
-#elif defined(HAVE_ATOMIC)
-#define update_zmalloc_stat_add(__n) __sync_add_and_fetch(&used_memory, (__n))
-#define update_zmalloc_pmem_stat_add(__n) __sync_add_and_fetch(&used_pmem_memory, (__n))
-#define update_zmalloc_stat_sub(__n) __sync_sub_and_fetch(&used_memory, (__n))
-#define update_zmalloc_pmem_stat_sub(__n) __sync_sub_and_fetch(&used_pmem_memory, (__n))
-#else
-#define update_zmalloc_stat_add(__n) do { \
-    pthread_mutex_lock(&used_memory_mutex); \
-    used_memory += (__n); \
-    pthread_mutex_unlock(&used_memory_mutex); \
-} while(0)
-
-#define update_zmalloc_pmem_stat_add(__n) do { \
-    pthread_mutex_lock(&used_pmem_memory_mutex); \
-    used_pmem_memory += (__n); \
-    pthread_mutex_unlock(&used_pmem_memory_mutex); \
-} while(0)
-
-#define update_zmalloc_stat_sub(__n) do { \
-    pthread_mutex_lock(&used_memory_mutex); \
-    used_memory -= (__n); \
-    pthread_mutex_unlock(&used_memory_mutex); \
-} while(0)
-
-#define update_zmalloc_pmem_stat_sub(__n) do { \
-    pthread_mutex_lock(&used_pmem_memory_mutex); \
-    used_pmem_memory -= (__n); \
-    pthread_mutex_unlock(&used_pmem_memory_mutex); \
-} while(0)
 #endif
 
 #ifndef USE_MEMKIND
@@ -157,47 +123,30 @@ static void *zrealloc_pmem(void *ptr, size_t size) {
 #define update_zmalloc_stat_alloc(__n) do { \
     size_t _n = (__n); \
     if (_n&(sizeof(long)-1)) _n += sizeof(long)-(_n&(sizeof(long)-1)); \
-    if (zmalloc_thread_safe) { \
-        update_zmalloc_stat_add(_n); \
-    } else { \
-        used_memory += _n; \
-    } \
+    atomicIncr(used_memory,__n); \
 } while(0)
 
 #define update_zmalloc_pmem_stat_alloc(__n) do { \
     size_t _n = (__n); \
     if (_n&(sizeof(long)-1)) _n += sizeof(long)-(_n&(sizeof(long)-1)); \
-    if (zmalloc_thread_safe) { \
-        update_zmalloc_pmem_stat_add(_n); \
-    } else { \
-        used_pmem_memory += _n; \
-    } \
+    atomicIncr(used_pmem_memory,__n); \
 } while(0)
 
 #define update_zmalloc_stat_free(__n) do { \
     size_t _n = (__n); \
     if (_n&(sizeof(long)-1)) _n += sizeof(long)-(_n&(sizeof(long)-1)); \
-    if (zmalloc_thread_safe) { \
-        update_zmalloc_stat_sub(_n); \
-    } else { \
-        used_memory -= _n; \
-    } \
+    atomicDecr(used_memory,__n); \
 } while(0)
 
 #define update_zmalloc_pmem_stat_free(__n) do { \
     size_t _n = (__n); \
     if (_n&(sizeof(long)-1)) _n += sizeof(long)-(_n&(sizeof(long)-1)); \
-    if (zmalloc_thread_safe) { \
-        update_zmalloc_pmem_stat_sub(_n); \
-    } else { \
-        used_pmem_memory -= _n; \
-    } \
+    atomicDecr(used_pmem_memory,__n); \
 } while(0)
 
 static size_t pmem_threshold = UINT_MAX;
 static size_t used_memory = 0;
 static size_t used_pmem_memory = 0;
-static int zmalloc_thread_safe = 0;
 pthread_mutex_t used_memory_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t used_pmem_memory_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -289,7 +238,6 @@ static void *zrealloc_pmem(void *ptr, size_t size) {
         zfree_pmem(ptr);
         return NULL;
     }
-
     if (ptr == NULL) return zmalloc(size);
 #ifdef HAVE_MALLOC_SIZE
     oldsize = zmalloc_size(ptr);
@@ -429,44 +377,14 @@ char *zstrdup(const char *s) {
 
 size_t zmalloc_used_memory(void) {
     size_t um;
-
-    if (zmalloc_thread_safe) {
-#if defined(__ATOMIC_RELAXED) || defined(HAVE_ATOMIC)
-        um = update_zmalloc_stat_add(0);
-#else
-        pthread_mutex_lock(&used_memory_mutex);
-        um = used_memory;
-        pthread_mutex_unlock(&used_memory_mutex);
-#endif
-    }
-    else {
-        um = used_memory;
-    }
-
+    atomicGet(used_memory,um);
     return um;
 }
 
 size_t zmalloc_used_pmem_memory(void) {
     size_t um;
-
-    if (zmalloc_thread_safe) {
-#if defined(__ATOMIC_RELAXED) || defined(HAVE_ATOMIC)
-        um = update_zmalloc_pmem_stat_add(0);
-#else
-        pthread_mutex_lock(&used_pmem_memory_mutex);
-        um = used_pmem_memory;
-        pthread_mutex_unlock(&used_pmem_memory_mutex);
-#endif
-    }
-    else {
-        um = used_pmem_memory;
-    }
-
+    atomicGet(used_pmem_memory,um);
     return um;
-}
-
-void zmalloc_enable_thread_safeness(void) {
-    zmalloc_thread_safe = 1;
 }
 
 void zmalloc_set_oom_handler(void (*oom_handler)(size_t)) {
@@ -548,6 +466,26 @@ size_t zmalloc_get_rss(void) {
 
     return t_info.resident_size;
 }
+#elif defined(__FreeBSD__)
+#include <sys/types.h>
+#include <sys/sysctl.h>
+#include <sys/user.h>
+#include <unistd.h>
+
+size_t zmalloc_get_rss(void) {
+    struct kinfo_proc info;
+    size_t infolen = sizeof(info);
+    int mib[4];
+    mib[0] = CTL_KERN;
+    mib[1] = KERN_PROC;
+    mib[2] = KERN_PROC_PID;
+    mib[3] = getpid();
+
+    if (sysctl(mib, 4, &info, &infolen, NULL, 0) == 0)
+        return (size_t)info.ki_rssize;
+
+    return 0L;
+}
 #else
 size_t zmalloc_get_rss(void) {
     /* If we can't get the RSS in an OS-specific way for this system just
@@ -559,23 +497,38 @@ size_t zmalloc_get_rss(void) {
 }
 #endif
 
-/* Fragmentation = RSS / allocated-bytes */
-float zmalloc_get_fragmentation_ratio(size_t rss) {
-    return (float)rss/zmalloc_used_memory();
-}
+#if defined(__APPLE__)
+/* For proc_pidinfo() used later in zmalloc_get_smap_bytes_by_field().
+ * Note that this file cannot be included in zmalloc.h because it includes
+ * a Darwin queue.h file where there is a "LIST_HEAD" macro (!) defined
+ * conficting with Redis user code. */
+#include <libproc.h>
+#endif
 
 /* Get the sum of the specified field (converted form kb to bytes) in
  * /proc/self/smaps. The field must be specified with trailing ":" as it
  * apperas in the smaps output.
  *
- * Example: zmalloc_get_smap_bytes_by_field("Rss:");
+ * If a pid is specified, the information is extracted for such a pid,
+ * otherwise if pid is -1 the information is reported is about the
+ * current process.
+ *
+ * Example: zmalloc_get_smap_bytes_by_field("Rss:",-1);
  */
 #if defined(HAVE_PROC_SMAPS)
-size_t zmalloc_get_smap_bytes_by_field(char *field) {
+size_t zmalloc_get_smap_bytes_by_field(char *field, long pid) {
     char line[1024];
     size_t bytes = 0;
-    FILE *fp = fopen("/proc/self/smaps","r");
     int flen = strlen(field);
+    FILE *fp;
+
+    if (pid == -1) {
+        fp = fopen("/proc/self/smaps","r");
+    } else {
+        char filename[128];
+        snprintf(filename,sizeof(filename),"/proc/%ld/smaps",pid);
+        fp = fopen(filename,"r");
+    }
 
     if (!fp) return 0;
     while(fgets(line,sizeof(line),fp) != NULL) {
@@ -591,18 +544,45 @@ size_t zmalloc_get_smap_bytes_by_field(char *field) {
     return bytes;
 }
 #else
-size_t zmalloc_get_smap_bytes_by_field(char *field) {
+/* Get sum of the specified field from libproc api call.
+ * As there are per page value basis we need to convert
+ * them accordingly.
+ *
+ * Note that AnonHugePages is a no-op as THP feature
+ * is not supported in this platform
+ */
+size_t zmalloc_get_smap_bytes_by_field(char *field, long pid) {
+#if defined(__APPLE__)
+    struct proc_regioninfo pri;
+    if (proc_pidinfo(pid, PROC_PIDREGIONINFO, 0, &pri, PROC_PIDREGIONINFO_SIZE) ==
+	PROC_PIDREGIONINFO_SIZE) {
+	if (!strcmp(field, "Private_Dirty:")) {
+            return (size_t)pri.pri_pages_dirtied * 4096;
+	} else if (!strcmp(field, "Rss:")) {
+            return (size_t)pri.pri_pages_resident * 4096;
+	} else if (!strcmp(field, "AnonHugePages:")) {
+            return 0;
+	}
+    }
+    return 0;
+#endif
     ((void) field);
+    ((void) pid);
     return 0;
 }
 #endif
 
-size_t zmalloc_get_private_dirty(void) {
-    return zmalloc_get_smap_bytes_by_field("Private_Dirty:");
+size_t zmalloc_get_private_dirty(long pid) {
+    return zmalloc_get_smap_bytes_by_field("Private_Dirty:",pid);
+}
+
+float zmalloc_get_fragmentation_ratio(size_t rss) {
+    return (float)rss/(zmalloc_used_memory()+zmalloc_used_pmem_memory());
+
 }
 
 /* Returns the size of physical memory (RAM) in bytes.
- * It looks ugly, but this is the cleanest way to achive cross platform results.
+ * It looks ugly, but this is the cleanest way to achieve cross platform results.
  * Cleaned up from:
  *
  * http://nadeausoftware.com/articles/2012/09/c_c_tip_how_get_physical_memory_size_system
@@ -641,7 +621,7 @@ size_t zmalloc_get_memory_size(void) {
     mib[0] = CTL_HW;
 #if defined(HW_REALMEM)
     mib[1] = HW_REALMEM;        /* FreeBSD. ----------------- */
-#elif defined(HW_PYSMEM)
+#elif defined(HW_PHYSMEM)
     mib[1] = HW_PHYSMEM;        /* Others. ------------------ */
 #endif
     unsigned int size = 0;      /* 32-bit */
@@ -656,5 +636,3 @@ size_t zmalloc_get_memory_size(void) {
     return 0L;          /* Unknown OS. */
 #endif
 }
-
-
