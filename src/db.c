@@ -211,6 +211,47 @@ void dbOverwrite(redisDb *db, robj *key, robj *val) {
     dictFreeVal(db->dict, &auxentry);
 }
 
+void dbAddOrOverwrite(redisDb *db, robj *key, robj *val) {
+    robj *val_ret;
+    expireIfNeeded(db,key);
+
+    dictEntry *de = dictFind(db->dict,key->ptr);
+    if (de) {
+        val_ret = dictGetVal(de);
+
+        /* Update the access time for the ageing algorithm.
+         * Don't do it if we have a saving child, as this will trigger
+         * a copy on write madness. */
+        if (!hasActiveChildProcess()){
+            if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
+                updateLFU(val_ret);
+            } else {
+                val_ret->lru = LRU_CLOCK();
+            }
+        }
+    } else {
+        val_ret = NULL;
+    }
+
+    if (val_ret == NULL) {
+        dbAdd(db,key,val);
+    } else {
+        serverAssertWithInfo(NULL,key,de != NULL);
+        dictEntry auxentry = *de;
+        if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
+            val->lru = val->lru;
+        }
+        dictSetVal(db->dict, de, val);
+    
+        if (server.lazyfree_lazy_server_del) {
+            freeObjAsync(val);
+            dictSetVal(db->dict, &auxentry, NULL);
+        }
+    
+        dictFreeVal(db->dict, &auxentry);
+    }
+}
+
 /* High level Set operation. This function can be used in order to set
  * a key, whatever it was existing or not, to a new object.
  *
@@ -221,11 +262,7 @@ void dbOverwrite(redisDb *db, robj *key, robj *val) {
  *
  * All the new keys in the database should be created via this interface. */
 void genericSetKey(redisDb *db, robj *key, robj *val, int keepttl) {
-    if (lookupKeyWrite(db,key) == NULL) {
-        dbAdd(db,key,val);
-    } else {
-        dbOverwrite(db,key,val);
-    }
+    dbAddOrOverwrite(db,key,val);
     incrRefCount(val);
     if (!keepttl) removeExpire(db,key);
     signalModifiedKey(db,key);
