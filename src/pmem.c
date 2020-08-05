@@ -84,12 +84,16 @@ void adjustPmemThresholdCycle(void) {
                     size_t threshold = zmalloc_get_threshold();
                     if (server.target_pmem_dram_ratio < current_ratio) {
                         size_t higher_threshold = THRESHOLD_UP(threshold,step);
-                        if (higher_threshold <= server.dynamic_threshold_max)
+                        if (higher_threshold <= server.dynamic_threshold_max) {
+                            serverLog(LL_WARNING, "Threshold set up from %zu to %zu", threshold, higher_threshold);
                             zmalloc_set_threshold(higher_threshold);
+                        }
                     } else {
                         size_t lower_threshold = THRESHOLD_DOWN(threshold,step);
-                        if (lower_threshold >= server.dynamic_threshold_min)
+                        if (lower_threshold >= server.dynamic_threshold_min) {
+                            serverLog(LL_WARNING, "Threshold set down from %zu to %zu", threshold, lower_threshold);
                             zmalloc_set_threshold(lower_threshold);
+                        }
                     }
                 }
                 ratio_diff_checkpoint = current_ratio_diff;
