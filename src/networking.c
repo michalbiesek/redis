@@ -1717,15 +1717,21 @@ int processMultibulkBuffer(client *c) {
                 c->querybuf = sdsnewlen(SDS_NOINIT,c->bulklen+2);
                 sdsclear(c->querybuf);
             } else {
-                c->argv[c->argc++] =
-                    createStringObject(c->querybuf+c->qb_pos,c->bulklen);
+//                robj *test = createStringObject(c->querybuf+c->qb_pos,c->bulklen);
+//                if (zmalloc_is_pmem(test) == 1) {
+//                    fprintf(stdout, "\nPMEM %zu", c->bulklen);
+//                } else {
+//                    fprintf(stdout, "\nDRAM %zu", c->bulklen);
+//                }
+//                c->argv[c->argc++] = test;
+                c->argv[c->argc++] = createCustomStringObject(c->querybuf+c->qb_pos,c->bulklen);
                 c->qb_pos += c->bulklen+2;
             }
             c->bulklen = -1;
             c->multibulklen--;
         }
     }
-
+//    fprintf(stdout, "\nargc value %d", c->argc);
     /* We're done when c->multibulk == 0 */
     if (c->multibulklen == 0) return C_OK;
 

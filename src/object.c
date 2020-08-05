@@ -39,6 +39,12 @@
 #define OBJ_MEMORY_GENERAL  0
 #define OBJ_MEMORY_DRAM     1
 
+static size_t pmem_emb_obj = 0;
+static size_t dram_emb_obj = 0;
+static size_t pmem_obj = 0;
+static size_t dram_obj = 0;
+
+
 /* ===================== Creation and parsing of objects ==================== */
 
 robj *createObject(int type, void *ptr) {
@@ -81,11 +87,56 @@ robj *createRawStringObject(const char *ptr, size_t len) {
     return createObject(OBJ_STRING, sdsnewlen(ptr,len));
 }
 
+/* Create a string object with encoding OBJ_ENCODING_RAW, that is a plain
+ * string object where o->ptr points to a proper sds string. */
+robj *createCustomRawStringObject(const char *ptr, size_t len) {
+    sds test = sdsnewcustomlen(ptr,len);
+    if (zmalloc_is_pmem(test) == 1) {
+      pmem_obj = pmem_obj + 1;
+    } else {
+      dram_obj = dram_obj + 1;
+    }
+    return createObject(OBJ_STRING, test);
+}
+
 /* Create a string object with encoding OBJ_ENCODING_EMBSTR, that is
  * an object where the sds string is actually an unmodifiable string
  * allocated in the same chunk as the object itself. */
 robj *createEmbeddedStringObject(const char *ptr, size_t len) {
     robj *o = zmalloc(sizeof(robj)+sizeof(struct sdshdr8)+len+1);
+    struct sdshdr8 *sh = (void*)(o+1);
+
+    o->type = OBJ_STRING;
+    o->encoding = OBJ_ENCODING_EMBSTR;
+    o->ptr = sh+1;
+    o->refcount = 1;
+    if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
+        o->lru = (LFUGetTimeInMinutes()<<8) | LFU_INIT_VAL;
+    } else {
+        o->lru = LRU_CLOCK();
+    }
+
+    sh->len = len;
+    sh->alloc = len;
+    sh->flags = SDS_TYPE_8;
+    if (ptr == SDS_NOINIT)
+        sh->buf[len] = '\0';
+    else if (ptr) {
+        memcpy(sh->buf,ptr,len);
+        sh->buf[len] = '\0';
+    } else {
+        memset(sh->buf,0,len+1);
+    }
+    return o;
+}
+
+robj *createCustomEmbeddedStringObject(const char *ptr, size_t len) {
+    robj *o = zmalloc(sizeof(robj)+sizeof(struct sdshdr8)+len+1);
+    if (zmalloc_is_pmem(o) == 1) {
+      pmem_emb_obj = pmem_emb_obj + 1;
+    } else {
+      dram_emb_obj = dram_emb_obj + 1;
+    }
     struct sdshdr8 *sh = (void*)(o+1);
 
     o->type = OBJ_STRING;
@@ -124,6 +175,13 @@ robj *createStringObject(const char *ptr, size_t len) {
         return createEmbeddedStringObject(ptr,len);
     else
         return createRawStringObject(ptr,len);
+}
+
+robj *createCustomStringObject(const char *ptr, size_t len) {
+    if (len <= OBJ_ENCODING_EMBSTR_SIZE_LIMIT)
+        return createCustomEmbeddedStringObject(ptr,len);
+    else
+        return createCustomRawStringObject(ptr,len);
 }
 
 /* Create a string object from a long long value. When possible returns a
@@ -454,6 +512,164 @@ void trimStringObjectIfNeeded(robj *o) {
     {
         o->ptr = sdsRemoveFreeSpace(o->ptr);
     }
+}
+
+robj*tryObjectEncodingSet(robj *o) {
+    long value;
+    sds s = o->ptr;
+    size_t len;
+
+    /* Make sure this is a string object, the only type we encode
+     * in this function. Other types use encoded memory efficient
+     * representations but are handled by the commands implementing
+     * the type. */
+    serverAssertWithInfo(NULL,o,o->type == OBJ_STRING);
+
+    /* We try some specialized encoding only for objects that are
+     * RAW or EMBSTR encoded, in other words objects that are still
+     * in represented by an actually array of chars. */
+    if (!sdsEncodedObject(o)) return o;
+
+    /* It's not safe to encode shared objects: shared objects can be shared
+     * everywhere in the "object space" of Redis and may end in places where
+     * they are not handled. We handle them only as values in the keyspace. */
+     if (o->refcount > 1) return o;
+
+    /* Check if we can represent this string as a long integer.
+     * Note that we are sure that a string larger than 20 chars is not
+     * representable as a 32 nor 64 bit integer. */
+    len = sdslen(s);
+    if (len <= 20 && string2l(s,len,&value)) {
+        /* This object is encodable as a long. Try to use a shared object.
+         * Note that we avoid using shared integers when maxmemory is used
+         * because every object needs to have a private LRU field for the LRU
+         * algorithm to work well. */
+        if ((server.maxmemory == 0 ||
+            !(server.maxmemory_policy & MAXMEMORY_FLAG_NO_SHARED_INTEGERS)) &&
+            value >= 0 &&
+            value < OBJ_SHARED_INTEGERS)
+        {
+            decrRefCount(o);
+            incrRefCount(shared.integers[value]);
+            return shared.integers[value];
+        } else {
+            if (o->encoding == OBJ_ENCODING_RAW) {
+                sdsfree(o->ptr);
+                o->encoding = OBJ_ENCODING_INT;
+                o->ptr = (void*) value;
+                return o;
+            } else if (o->encoding == OBJ_ENCODING_EMBSTR) {
+                decrRefCount(o);
+                return createStringObjectFromLongLongForValue(value);
+            }
+        }
+    }
+
+    /* If the string is small and is still RAW encoded,
+     * try the EMBSTR encoding which is more efficient.
+     * In this representation the object and the SDS string are allocated
+     * in the same chunk of memory to save space and cache misses. */
+    if (len <= OBJ_ENCODING_EMBSTR_SIZE_LIMIT) {
+        robj *emb;
+
+        if (o->encoding == OBJ_ENCODING_EMBSTR) return o;
+        emb = createEmbeddedStringObject(s,sdslen(s));
+        decrRefCount(o);
+        return emb;
+    }
+
+    /* We can't encode the object...
+     *
+     * Do the last try, and at least optimize the SDS string inside
+     * the string object to require little space, in case there
+     * is more than 10% of free space at the end of the SDS string.
+     *
+     * We do that only for relatively large strings as this branch
+     * is only entered if the length of the string is greater than
+     * OBJ_ENCODING_EMBSTR_SIZE_LIMIT. */
+    trimStringObjectIfNeeded(o);
+
+    /* Return the original object. */
+    return o;
+}
+
+robj *tryObjectEncodingMset(robj *o) {
+    long value;
+    sds s = o->ptr;
+    size_t len;
+
+    /* Make sure this is a string object, the only type we encode
+     * in this function. Other types use encoded memory efficient
+     * representations but are handled by the commands implementing
+     * the type. */
+    serverAssertWithInfo(NULL,o,o->type == OBJ_STRING);
+
+    /* We try some specialized encoding only for objects that are
+     * RAW or EMBSTR encoded, in other words objects that are still
+     * in represented by an actually array of chars. */
+    if (!sdsEncodedObject(o)) return o;
+
+    /* It's not safe to encode shared objects: shared objects can be shared
+     * everywhere in the "object space" of Redis and may end in places where
+     * they are not handled. We handle them only as values in the keyspace. */
+     if (o->refcount > 1) return o;
+
+    /* Check if we can represent this string as a long integer.
+     * Note that we are sure that a string larger than 20 chars is not
+     * representable as a 32 nor 64 bit integer. */
+    len = sdslen(s);
+    if (len <= 20 && string2l(s,len,&value)) {
+        /* This object is encodable as a long. Try to use a shared object.
+         * Note that we avoid using shared integers when maxmemory is used
+         * because every object needs to have a private LRU field for the LRU
+         * algorithm to work well. */
+        if ((server.maxmemory == 0 ||
+            !(server.maxmemory_policy & MAXMEMORY_FLAG_NO_SHARED_INTEGERS)) &&
+            value >= 0 &&
+            value < OBJ_SHARED_INTEGERS)
+        {
+            decrRefCount(o);
+            incrRefCount(shared.integers[value]);
+            return shared.integers[value];
+        } else {
+            if (o->encoding == OBJ_ENCODING_RAW) {
+                sdsfree(o->ptr);
+                o->encoding = OBJ_ENCODING_INT;
+                o->ptr = (void*) value;
+                return o;
+            } else if (o->encoding == OBJ_ENCODING_EMBSTR) {
+                decrRefCount(o);
+                return createStringObjectFromLongLongForValue(value);
+            }
+        }
+    }
+
+    /* If the string is small and is still RAW encoded,
+     * try the EMBSTR encoding which is more efficient.
+     * In this representation the object and the SDS string are allocated
+     * in the same chunk of memory to save space and cache misses. */
+    if (len <= OBJ_ENCODING_EMBSTR_SIZE_LIMIT) {
+        robj *emb;
+
+        if (o->encoding == OBJ_ENCODING_EMBSTR) return o;
+        emb = createEmbeddedStringObject(s,sdslen(s));
+        decrRefCount(o);
+        return emb;
+    }
+
+    /* We can't encode the object...
+     *
+     * Do the last try, and at least optimize the SDS string inside
+     * the string object to require little space, in case there
+     * is more than 10% of free space at the end of the SDS string.
+     *
+     * We do that only for relatively large strings as this branch
+     * is only entered if the length of the string is greater than
+     * OBJ_ENCODING_EMBSTR_SIZE_LIMIT. */
+    trimStringObjectIfNeeded(o);
+
+    /* Return the original object. */
+    return o;
 }
 
 /* Try to encode a string object in order to save space */

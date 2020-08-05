@@ -1639,7 +1639,8 @@ int main(int argc, const char **argv) {
         if (config.redis_config != NULL) freeRedisConfig(config.redis_config);
         return 0;
     }
-
+//    fprintf(stdout, "\nROZMIAR DATA: %zu", config.datasize+1);
+//    fprintf(stdout, "\nTHRESHOLD GET %zu\n", zmalloc_get_threshold());
     /* Run default benchmark suite. */
     data = zmalloc(config.datasize+1);
     do {

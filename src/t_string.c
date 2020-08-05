@@ -142,7 +142,18 @@ void setCommand(client *c) {
         }
     }
 
-    c->argv[2] = tryObjectEncoding(c->argv[2]);
+    c->argv[2] = tryObjectEncodingSet(c->argv[2]);
+//    if (zmalloc_is_pmem(c->argv[1]) == 1 ) {
+//        fprintf(stdout, "\nARG j PMEM %zu", zmalloc_usable(c->argv[1]));
+//    } else {
+//        fprintf(stdout, "\nARG j DRAM %zu", zmalloc_usable(c->argv[1]));
+//    }
+//    if (zmalloc_is_pmem(c->argv[2]) == 1 ) {
+//        fprintf(stdout, "\nARG plus PMEM %zu", zmalloc_usable(c->argv[2]));
+//    } else {
+//        fprintf(stdout, "\nARG plus DRAM %zu", zmalloc_usable(c->argv[2]));
+
+//    }
     setGenericCommand(c,flags,c->argv[1],c->argv[2],expire,unit,NULL,NULL);
 }
 
@@ -325,9 +336,19 @@ void msetGenericCommand(client *c, int nx) {
             }
         }
     }
-
+//    fprintf(stdout, "\nMSET PMEM %d", c->argc);
     for (j = 1; j < c->argc; j += 2) {
-        c->argv[j+1] = tryObjectEncoding(c->argv[j+1]);
+        c->argv[j+1] = tryObjectEncodingMset(c->argv[j+1]);
+//        if (zmalloc_is_pmem(c->argv[j]) == 1 ) {
+//            fprintf(stdout, "\nARG j PMEM %zu", zmalloc_usable(c->argv[j]));
+//        } else {
+//            fprintf(stdout, "\nARG j DRAM %zu", zmalloc_usable(c->argv[j]));
+//        }
+//        if (zmalloc_is_pmem(c->argv[j+1]) == 1 ) {
+//            fprintf(stdout, "\nARG plus PMEM %zu", zmalloc_usable(c->argv[j+1]));
+//        } else {
+//            fprintf(stdout, "\nARG plus DRAM %zu", zmalloc_usable(c->argv[j+1]));
+//        }
         setKey(c,c->db,c->argv[j],c->argv[j+1]);
         notifyKeyspaceEvent(NOTIFY_STRING,"set",c->argv[j],c->db->id);
     }

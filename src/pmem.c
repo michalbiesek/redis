@@ -62,6 +62,11 @@ void pmemThresholdInit(void)
     }
 }
 
+int getPmemPolicy(void)
+{
+    return server.memory_alloc_policy;
+}
+
 void adjustPmemThresholdCycle(void) {
     if (server.memory_alloc_policy == MEM_POLICY_RATIO) {
         run_with_period(server.ratio_check_period) {
@@ -76,6 +81,7 @@ void adjustPmemThresholdCycle(void) {
             if (absDiff(total_memory_checkpoint, total_memory_current) > 100) {
                 double current_ratio = (double)pmem_memory/dram_memory;
                 double current_ratio_diff = fabs(current_ratio - server.target_pmem_dram_ratio);
+//                fprintf(stdout, "current_ratio_diff %f current_ratio %f \n", current_ratio_diff, current_ratio);
                 if (current_ratio_diff > 0.02) {
                     //current ratio is worse than moment before
                     double variableMultipler = current_ratio/server.target_pmem_dram_ratio;
@@ -94,6 +100,7 @@ void adjustPmemThresholdCycle(void) {
                 }
                 ratio_diff_checkpoint = current_ratio_diff;
             }
+//            fprintf(stdout, "total_memory_checkpoint %zu total_memory_current %zu\n", total_memory_checkpoint, total_memory_current);
             total_memory_checkpoint = total_memory_current;
         }
     }

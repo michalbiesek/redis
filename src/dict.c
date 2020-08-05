@@ -276,6 +276,9 @@ int dictAdd(dict *d, void *key, void *val)
     return DICT_OK;
 }
 
+static size_t add_raw_pmem = 0;
+static size_t add_raw_dram = 0;
+
 /* Low level add or find:
  * This function adds the entry but instead of setting a value returns the
  * dictEntry structure to the user, that will make sure to fill the value
@@ -312,14 +315,72 @@ dictEntry *dictAddRaw(dict *d, void *key, dictEntry **existing)
      * system it is more likely that recently added entries are accessed
      * more frequently. */
     ht = dictIsRehashing(d) ? &d->ht[1] : &d->ht[0];
-    entry = zmalloc(sizeof(*entry));
+    entry = zmalloc_dram(sizeof(*entry));
     entry->next = ht->table[index];
     ht->table[index] = entry;
     ht->used++;
 
+//    if (zmalloc_is_pmem(key)==1){
+//        add_raw_pmem += 1;
+//    }
+//     else {
+//        add_raw_dram += 1;
+//    }
+
     /* Set the hash entry fields. */
     dictSetKey(d, entry, key);
     return entry;
+}
+
+dictEntry *dictAddRawDB(dict *d, void *key, dictEntry **existing)
+{
+    long index;
+    dictEntry *entry;
+    dictht *ht;
+
+    if (dictIsRehashing(d)) _dictRehashStep(d);
+
+    /* Get the index of the new element, or -1 if
+     * the element already exists. */
+    if ((index = _dictKeyIndex(d, key, dictHashKey(d,key), existing)) == -1)
+        return NULL;
+
+    /* Allocate the memory and store the new entry.
+     * Insert the element in top, with the assumption that in a database
+     * system it is more likely that recently added entries are accessed
+     * more frequently. */
+    ht = dictIsRehashing(d) ? &d->ht[1] : &d->ht[0];
+    entry = zmalloc_dram(sizeof(*entry));
+    entry->next = ht->table[index];
+    ht->table[index] = entry;
+    ht->used++;
+
+    if (zmalloc_is_pmem(key)==1){
+        add_raw_pmem += 1;
+    }
+     else {
+        add_raw_dram += 1;
+    }
+
+    /* Set the hash entry fields. */
+    dictSetKey(d, entry, key);
+    return entry;
+}
+
+/* Add an element to the target hash table */
+int dictAddDB(dict *d, void *key, void *val)
+{
+    dictEntry *entry = dictAddRawDB(d,key,NULL);
+
+    if (!entry) return DICT_ERR;
+    if (zmalloc_is_pmem(val)==1){
+        add_raw_pmem += 1;
+    }
+     else {
+        add_raw_dram += 1;
+    }
+    dictSetVal(d, entry, val);
+    return DICT_OK;
 }
 
 /* Add or Overwrite:
@@ -478,6 +539,11 @@ void dictRelease(dict *d)
     zfree_dram(d);
 }
 
+static size_t de_he_key_pmem = 0;
+static size_t de_he_key_dram = 0;
+static size_t key_pmem = 0;
+static size_t key_dram = 0;
+
 dictEntry *dictFind(dict *d, const void *key)
 {
     dictEntry *he;
@@ -489,9 +555,126 @@ dictEntry *dictFind(dict *d, const void *key)
     for (table = 0; table <= 1; table++) {
         idx = h & d->ht[table].sizemask;
         he = d->ht[table].table[idx];
+//        if (zmalloc_is_pmem(he)==1){
+//            fprintf(stdout, "\nHE allocated on PMEM.");
+//        }
+//        else {
+//            fprintf(stdout, "\nHE allocated on DRAM.");
+//        }
+//        if (zmalloc_is_pmem(key)==1){
+//            fprintf(stdout, "\nkey allocated on PMEM.");
+//        }
+//        else {
+//            fprintf(stdout, "\nkey allocated on DRAM.");
+//        }
         while(he) {
-            if (key==he->key || dictCompareKeys(d, key, he->key))
+            if (zmalloc_is_pmem(he->key)==1){
+                de_he_key_pmem += 1;
+                if (zmalloc_is_pmem((void*)(key))==1){
+                    key_pmem += 1;
+                }
+                 else {
+                    key_dram += 1;
+                }
+            }
+            else {
+                de_he_key_dram += 1;
+                if (zmalloc_is_pmem((void*)(key))==1){
+                    key_pmem += 1;
+                }
+                 else {
+                    key_dram += 1;
+                }
+            }
+            if (key==he->key)
                 return he;
+            if (dictCompareKeys(d, key, he->key))
+                return he;
+
+            he = he->next;
+        }
+        if (!dictIsRehashing(d)) return NULL;
+    }
+    return NULL;
+}
+
+dictEntry *dictFindDB(dict *d, const void *key)
+{
+    dictEntry *he;
+    uint64_t h, idx, table;
+
+    if (dictSize(d) == 0) return NULL; /* dict is empty */
+    if (dictIsRehashing(d)) _dictRehashStep(d);
+    h = dictHashKey(d, key);
+    for (table = 0; table <= 1; table++) {
+        idx = h & d->ht[table].sizemask;
+        he = d->ht[table].table[idx];
+        while(he) {
+            if (zmalloc_is_pmem(he->key)==1){
+                de_he_key_pmem += 1;
+                if (zmalloc_is_pmem((void*)(key))==1){
+                    key_pmem += 1;
+                }
+                 else {
+                    key_dram += 1;
+                }
+            }
+            else {
+                de_he_key_dram += 1;
+                if (zmalloc_is_pmem((void*)(key))==1){
+                    key_pmem += 1;
+                }
+                 else {
+                    key_dram += 1;
+                }
+            }
+            if (key==he->key)
+                return he;
+            if (dictCompareKeys(d, key, he->key))
+                return he;
+
+            he = he->next;
+        }
+        if (!dictIsRehashing(d)) return NULL;
+    }
+    return NULL;
+}
+
+dictEntry *dictFindOverwrite(dict *d, const void *key)
+{
+    dictEntry *he;
+    uint64_t h, idx, table;
+
+    if (dictSize(d) == 0) return NULL; /* dict is empty */
+    if (dictIsRehashing(d)) _dictRehashStep(d);
+    h = dictHashKey(d, key);
+    for (table = 0; table <= 1; table++) {
+        idx = h & d->ht[table].sizemask;
+        he = d->ht[table].table[idx];
+        while(he) {
+            if (zmalloc_is_pmem(he->key)==1){
+                de_he_key_pmem += 1;
+                if (zmalloc_is_pmem((void*)(key))==1){
+                    key_pmem += 1;
+                }
+                 else {
+                    key_dram += 1;
+                }
+            }
+            else {
+                de_he_key_dram += 1;
+                if (zmalloc_is_pmem((void*)(key))==1){
+                    key_pmem += 1;
+                }
+                 else {
+                    key_dram += 1;
+                }
+            }
+            if (key==he->key)
+                return he;
+            if (dictCompareKeys(d, key, he->key))
+                return he;
+
             he = he->next;
         }
         if (!dictIsRehashing(d)) return NULL;

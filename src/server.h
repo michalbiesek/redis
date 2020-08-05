@@ -1763,12 +1763,17 @@ void freeZsetObject(robj *o);
 void freeHashObject(robj *o);
 robj *createObject(int type, void *ptr);
 robj *createStringObject(const char *ptr, size_t len);
+robj *createCustomStringObject(const char *ptr, size_t len);
 robj *createRawStringObject(const char *ptr, size_t len);
+robj *createCustomRawStringObject(const char *ptr, size_t len);
 robj *createEmbeddedStringObject(const char *ptr, size_t len);
+robj *createCustomEmbeddedStringObject(const char *ptr, size_t len);
 robj *dupStringObject(const robj *o);
 int isSdsRepresentableAsLongLong(sds s, long long *llval);
 int isObjectRepresentableAsLongLong(robj *o, long long *llongval);
 robj *tryObjectEncoding(robj *o);
+robj *tryObjectEncodingMset(robj *o);
+robj *tryObjectEncodingSet(robj *o);
 robj *getDecodedObject(robj *o);
 size_t stringObjectLen(robj *o);
 robj *createStringObjectFromLongLong(long long value);
@@ -2091,6 +2096,7 @@ void setExpire(client *c, redisDb *db, robj *key, long long when);
 robj *lookupKey(redisDb *db, robj *key, int flags);
 robj *lookupKeyRead(redisDb *db, robj *key);
 robj *lookupKeyWrite(redisDb *db, robj *key);
+robj *lookupKeyWriteDB(redisDb *db, robj *key);
 robj *lookupKeyReadOrReply(client *c, robj *key, robj *reply);
 robj *lookupKeyWriteOrReply(client *c, robj *key, robj *reply);
 robj *lookupKeyReadWithFlags(redisDb *db, robj *key, int flags);
@@ -2219,6 +2225,7 @@ void dictSdsDestructor(void *privdata, void *val);
 /* pmem.c - Handling Persistent Memory */
 void pmemThresholdInit(void);
 void adjustPmemThresholdCycle(void);
+int getPmemPolicy(void);
 
 /* Git SHA1 */
 char *redisGitSHA1(void);

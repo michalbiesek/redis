@@ -1161,6 +1161,23 @@ int dictSdsKeyCompare(void *privdata, const void *key1,
     l1 = sdslen((sds)key1);
     l2 = sdslen((sds)key2);
     if (l1 != l2) return 0;
+//    int l1_status = (zmalloc_is_pmem((void*)key1)==1);
+//    int l2_status = (zmalloc_is_pmem((void*)key2)==1);
+
+//    if (l1_status){
+//        fprintf(stdout, "\nkey1 allocated on PMEM.");
+//    }
+//    else {
+//        fprintf(stdout, "\nkey1 allocated on DRAM.");
+//    }
+    
+//    if (l2_status){
+//        fprintf(stdout, "\nkey2 allocated on PMEM.");
+//    }
+//    else {
+//        fprintf(stdout, "\nkey2 allocated on DRAM.");
+//    }
+    
     return memcmp(key1, key2, l1) == 0;
 }
 
@@ -4085,6 +4102,8 @@ sds genRedisInfoString(const char *section) {
     if (allsections || defsections || !strcasecmp(section,"memory")) {
         char hmem[64];
         char hmem_pmem[64];
+        char hmem_pmem_all[64];
+        char hmem_pmem_freed[64];
         char peak_hmem[64];
         char total_system_hmem[64];
         char used_memory_lua_hmem[64];
@@ -4093,6 +4112,8 @@ sds genRedisInfoString(const char *section) {
         char maxmemory_hmem[64];
         size_t zmalloc_used = zmalloc_used_memory();
         size_t zmalloc_pmem_used = zmalloc_used_pmem_memory();
+        size_t zmalloc_pmem_all = zmalloc_allocated_pmem_memory();
+        size_t zmalloc_pmem_freed = zmalloc_freed_pmem_memory();
         size_t total_system_mem = server.system_memory_size;
         size_t pmem_threshold = zmalloc_get_threshold();
         const char *evict_policy = evictPolicyToString();
@@ -4108,6 +4129,8 @@ sds genRedisInfoString(const char *section) {
 
         bytesToHuman(hmem,zmalloc_used);
         bytesToHuman(hmem_pmem,zmalloc_pmem_used);
+        bytesToHuman(hmem_pmem_all,zmalloc_pmem_all);
+        bytesToHuman(hmem_pmem_freed,zmalloc_pmem_freed);
         bytesToHuman(peak_hmem,server.stat_peak_memory);
         bytesToHuman(total_system_hmem,total_system_mem);
         bytesToHuman(used_memory_lua_hmem,memory_lua);
@@ -4132,6 +4155,10 @@ sds genRedisInfoString(const char *section) {
             "pmem_threshold:%zu\r\n"
             "used_memory_pmem:%zu\r\n"
             "used_memory_pmem_human:%s\r\n"
+            "PMEM ALL used_memory_pmem_all:%zu\r\n"
+            "PMEM ALL used_memory_pmem_human_all:%s\r\n"
+            "PMEM ALL used_memory_pmem_freed:%zu\r\n"
+            "PMEM ALL used_memory_pmem_human_freed:%s\r\n"
             "allocator_allocated:%zu\r\n"
             "allocator_active:%zu\r\n"
             "allocator_resident:%zu\r\n"
@@ -4175,6 +4202,10 @@ sds genRedisInfoString(const char *section) {
             pmem_threshold,
             zmalloc_pmem_used,
             hmem_pmem,
+            zmalloc_pmem_all,
+            hmem_pmem_all,
+            zmalloc_pmem_freed,
+            hmem_pmem_freed,
             server.cron_malloc_stats.allocator_allocated,
             server.cron_malloc_stats.allocator_active,
             server.cron_malloc_stats.allocator_resident,
@@ -4555,17 +4586,54 @@ sds genRedisInfoString(const char *section) {
 
     /* Key space */
     if (allsections || defsections || !strcasecmp(section,"keyspace")) {
+        size_t pmem_keys = 0;
+        size_t dram_keys = 0;
+        size_t pmem_values = 0;
+        size_t dram_values = 0;
+        size_t pmem_keys_sds = 0;
+        size_t dram_keys_sds = 0;
+        size_t pmem_values_sds = 0;
+        size_t dram_values_sds = 0;
+        dictEntry *de = NULL;
         if (sections++) info = sdscat(info,"\r\n");
         info = sdscatprintf(info, "# Keyspace\r\n");
         for (j = 0; j < server.dbnum; j++) {
             long long keys, vkeys;
-
+            //check PMEM and DRAM values
+            dictIterator *di = dictGetSafeIterator(server.db[j].dict);
+            while((de = dictNext(di)) != NULL) {
+                sds sdskey = dictGetKey(de);
+                if (zmalloc_is_pmem(sdskey) == 1 ) {
+                    pmem_keys = pmem_keys + 1;
+                } else {
+                    dram_keys = dram_keys + 1;
+                }
+                void *test_key = sdsAllocPtr(sdskey);
+                if (zmalloc_is_pmem(test_key) == 1 ) {
+                    pmem_keys_sds = pmem_keys_sds + 1;
+                } else {
+                    dram_keys_sds = dram_keys_sds + 1;
+                }
+                sds sdsval = dictGetVal(de);
+                if (zmalloc_is_pmem(sdsval) == 1 ) {
+                    pmem_values = pmem_values + 1;
+                } else {
+                    dram_values = dram_values + 1;
+                }
+                void *test_val = sdsAllocPtr(sdsval);
+                if (zmalloc_is_pmem(test_val) == 1 ) {
+                    pmem_values_sds = pmem_values_sds + 1;
+                } else {
+                    dram_values_sds = dram_values_sds + 1;
+                }
+            }
+            dictReleaseIterator(di);
             keys = dictSize(server.db[j].dict);
             vkeys = dictSize(server.db[j].expires);
             if (keys || vkeys) {
                 info = sdscatprintf(info,
-                    "db%d:keys=%lld,expires=%lld,avg_ttl=%lld\r\n",
-                    j, keys, vkeys, server.db[j].avg_ttl);
+                    "db%d:keys=%lld,expires=%lld,avg_ttl=%lld,pmem_keys=%zu,dram_keys=%zu,pmem_values=%zu,dram_values=%zu,pmem_keys_sds=%zu,dram_keys_sds=%zu,pmem_values_sds=%zu,dram_values_sds=%zu\r\n",
+                    j, keys, vkeys, server.db[j].avg_ttl,pmem_keys,dram_keys,pmem_values,dram_values,pmem_keys_sds,dram_keys_sds,pmem_values_sds,dram_values_sds);
             }
         }
     }

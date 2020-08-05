@@ -49,6 +49,27 @@ void updateLFU(robj *val) {
     val->lru = (LFUGetTimeInMinutes()<<8) | counter;
 }
 
+robj *lookupKeyDB(redisDb *db, robj *key, int flags) {
+    dictEntry *de = dictFindDB(db->dict,key->ptr);
+    if (de) {
+        robj *val = dictGetVal(de);
+
+        /* Update the access time for the ageing algorithm.
+         * Don't do it if we have a saving child, as this will trigger
+         * a copy on write madness. */
+        if (!hasActiveChildProcess() && !(flags & LOOKUP_NOTOUCH)){
+            if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
+                updateLFU(val);
+            } else {
+                val->lru = LRU_CLOCK();
+            }
+        }
+        return val;
+    } else {
+        return NULL;
+    }
+}
+
 /* Low level key lookup API, not actually called directly from commands
  * implementations that should instead rely on lookupKeyRead(),
  * lookupKeyWrite() and lookupKeyReadWithFlags(). */
@@ -160,6 +181,11 @@ robj *lookupKeyWrite(redisDb *db, robj *key) {
     return lookupKeyWriteWithFlags(db, key, LOOKUP_NONE);
 }
 
+robj *lookupKeyWriteDB(redisDb *db, robj *key) {
+    expireIfNeeded(db,key);
+    return lookupKeyDB(db,key,LOOKUP_NONE);
+}
+
 robj *lookupKeyReadOrReply(client *c, robj *key, robj *reply) {
     robj *o = lookupKeyRead(c->db, key);
     if (!o) addReply(c,reply);
@@ -172,13 +198,34 @@ robj *lookupKeyWriteOrReply(client *c, robj *key, robj *reply) {
     return o;
 }
 
+static size_t db_test_pmem =0;
+static size_t db_test_dram =0;
+
 /* Add the key to the DB. It's up to the caller to increment the reference
  * counter of the value if needed.
  *
  * The program is aborted if the key already exists. */
 void dbAdd(redisDb *db, robj *key, robj *val) {
     sds copy = sdsdup(key->ptr);
-    int retval = dictAdd(db->dict, copy, val);
+//    int key_ptr_status = (zmalloc_is_pmem(key->ptr)==1);
+//    int sds_dup_status = (zmalloc_is_pmem(copy)==1);
+
+//    if (key_ptr_status){
+//        fprintf(stdout, "\ndbAdd key_ptr allocated on PMEM.");
+//    }
+//    else {
+//        fprintf(stdout, "\ndbAdd key_ptr allocated on DRAM.");
+//    }
+    
+    if (zmalloc_is_pmem(key->ptr) ==1){
+        db_test_pmem++;
+    }
+    else {
+        db_test_dram++;
+    }
+
+
+    int retval = dictAddDB(db->dict, copy, val);
 
     serverAssertWithInfo(NULL,key,retval == DICT_OK);
     if (val->type == OBJ_LIST ||
@@ -212,7 +259,7 @@ int dbAddRDBLoad(redisDb *db, sds key, robj *val) {
  *
  * The program is aborted if the key was not already present. */
 void dbOverwrite(redisDb *db, robj *key, robj *val) {
-    dictEntry *de = dictFind(db->dict,key->ptr);
+    dictEntry *de = dictFindOverwrite(db->dict,key->ptr);
 
     serverAssertWithInfo(NULL,key,de != NULL);
     dictEntry auxentry = *de;
@@ -242,7 +289,7 @@ void dbOverwrite(redisDb *db, robj *key, robj *val) {
  * The client 'c' argument may be set to NULL if the operation is performed
  * in a context where there is no clear client performing the operation. */
 void genericSetKey(client *c, redisDb *db, robj *key, robj *val, int keepttl, int signal) {
-    if (lookupKeyWrite(db,key) == NULL) {
+    if (lookupKeyWriteDB(db,key) == NULL) {
         dbAdd(db,key,val);
     } else {
         dbOverwrite(db,key,val);
