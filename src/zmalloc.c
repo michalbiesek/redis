@@ -517,6 +517,51 @@ size_t zmalloc_get_rss(void) {
 }
 #endif
 
+#if defined(USE_JEMALLOC)
+
+int zmalloc_get_allocator_info(size_t *allocated,
+                               size_t *active,
+                               size_t *resident) {
+    uint64_t epoch = 1;
+    size_t sz;
+    *allocated = *resident = *active = 0;
+    /* Update the statistics cached by mallctl. */
+    sz = sizeof(epoch);
+    je_mallctl("epoch", &epoch, &sz, &epoch, sz);
+    sz = sizeof(size_t);
+    /* Unlike RSS, this does not include RSS from shared libraries and other non
+     * heap mappings. */
+    je_mallctl("stats.resident", resident, &sz, NULL, 0);
+    /* Unlike resident, this doesn't not include the pages jemalloc reserves
+     * for re-use (purge will clean that). */
+    je_mallctl("stats.active", active, &sz, NULL, 0);
+    /* Unlike zmalloc_used_memory, this matches the stats.resident by taking
+     * into account all allocations done by this process (not only zmalloc). */
+    je_mallctl("stats.allocated", allocated, &sz, NULL, 0);
+    return 1;
+}
+#elif defined(USE_MEMKIND)
+int zmalloc_get_allocator_info(size_t *allocated,
+                               size_t *active,
+                               size_t *resident) {
+    memkind_update_cached_stats();
+    memkind_get_stat(NULL, MEMKIND_STAT_TYPE_RESIDENT, resident);
+    memkind_get_stat(NULL, MEMKIND_STAT_TYPE_ACTIVE, active);
+    memkind_get_stat(NULL, MEMKIND_STAT_TYPE_ALLOCATED, allocated);
+    return 1;
+}
+
+#else
+
+int zmalloc_get_allocator_info(size_t *allocated,
+                               size_t *active,
+                               size_t *resident) {
+    *allocated = *resident = *active = 0;
+    return 1;
+}
+
+#endif
+
 #if defined(__APPLE__)
 /* For proc_pidinfo() used later in zmalloc_get_smap_bytes_by_field().
  * Note that this file cannot be included in zmalloc.h because it includes
