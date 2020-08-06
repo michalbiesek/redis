@@ -1133,6 +1133,8 @@ struct redisServer {
     long long proto_max_bulk_len;   /* Protocol bulk length maximum size. */
     /* PMEM */
     int memory_alloc_policy;                  /* Policy for memory allocation */
+    unsigned int static_threshold;            /* Persistent Memory static threshold */
+    unsigned int initial_dynamic_threshold;   /* Persistent Memory initial dynamic threshold */
     int hashtable_on_dram;                    /* Keep hashtable always on DRAM */
     /* Blocked clients */
     unsigned int bpop_blocked_clients; /* Number of clients blocked by lists */
@@ -1828,6 +1830,9 @@ unsigned long LFUDecrAndReturn(robj *o);
 uint64_t dictSdsHash(const void *key);
 int dictSdsKeyCompare(void *privdata, const void *key1, const void *key2);
 void dictSdsDestructor(void *privdata, void *val);
+
+/* pmem.c - Handling Persistent Memory */
+void pmemThresholdInit(void);
 
 /* Git SHA1 */
 char *redisGitSHA1(void);
