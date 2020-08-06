@@ -791,6 +791,11 @@ typedef struct clientBufferLimitsConfig {
     time_t soft_limit_seconds;
 } clientBufferLimitsConfig;
 
+typedef struct ratioDramPmemConfig {
+    int pmem_val;
+    int dram_val;
+} ratioDramPmemConfig;
+
 extern clientBufferLimitsConfig clientBufferLimitsDefaults[CLIENT_TYPE_OBUF_COUNT];
 
 /* The redisOp structure defines a Redis Operation, that is an instance of
@@ -1137,6 +1142,8 @@ struct redisServer {
     unsigned int initial_dynamic_threshold;   /* Persistent Memory initial dynamic threshold */
     unsigned int dynamic_threshold_min;       /* Minimum value of dynamic threshold */
     unsigned int dynamic_threshold_max;       /* Maximum value of dynamic threshold */
+    ratioDramPmemConfig dram_pmem_ratio;      /* DRAM/Persistent Memory ratio */
+    double target_pmem_dram_ratio;            /* Target PMEM/DRAM ratio */
     int hashtable_on_dram;                    /* Keep hashtable always on DRAM */
     /* Blocked clients */
     unsigned int bpop_blocked_clients; /* Number of clients blocked by lists */
@@ -1835,6 +1842,7 @@ void dictSdsDestructor(void *privdata, void *val);
 
 /* pmem.c - Handling Persistent Memory */
 void pmemThresholdInit(void);
+void adjustPmemThresholdCycle(void);
 
 /* Git SHA1 */
 char *redisGitSHA1(void);

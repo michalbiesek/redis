@@ -262,6 +262,15 @@ void loadServerConfigFromString(char *config) {
             } else if (argc == 2 && !strcasecmp(argv[1],"")) {
                 resetServerSaveParams();
             }
+        } else if (!strcasecmp(argv[0],"dram-pmem-ratio") && argc == 3) {
+                int dram = atoi(argv[1]);
+                int pmem = atoi(argv[2]);
+                if (dram == 0 || pmem == 0) {
+                  err = "Invalid dram-pmem-ratio parameters"; goto loaderr;
+                }
+                server.dram_pmem_ratio.dram_val = dram;
+                server.dram_pmem_ratio.pmem_val = pmem;
+                server.target_pmem_dram_ratio = (double)pmem/dram;
         } else if (!strcasecmp(argv[0],"dir") && argc == 2) {
             if (chdir(argv[1]) == -1) {
                 serverLog(LL_WARNING,"Can't chdir to '%s': %s",
@@ -791,6 +800,10 @@ void loadServerConfigFromString(char *config) {
         }
         if (server.dynamic_threshold_max < server.initial_dynamic_threshold) {
             err = "dynamic threshold: initial value must be less than or equal to maximum value for ratio memory allocation policy";
+            goto loaderr;
+        }
+        if (server.dram_pmem_ratio.pmem_val == 0 && server.dram_pmem_ratio.dram_val == 0) {
+            err = "dram-pmem-ratio must be defined for ratio memory allocation policy";
             goto loaderr;
         }
     }
@@ -1448,6 +1461,13 @@ void configGetCommand(client *c) {
         addReplyBulkCString(c,"client-output-buffer-limit");
         addReplyBulkCString(c,buf);
         sdsfree(buf);
+        matches++;
+    }
+    if (stringmatch(pattern,"dram-pmem-ratio",1)) {
+        char buf[32];
+        snprintf(buf,sizeof(buf),"%d %d", server.dram_pmem_ratio.dram_val, server.dram_pmem_ratio.pmem_val);
+        addReplyBulkCString(c,"dram-pmem-ratio");
+        addReplyBulkCString(c,buf);
         matches++;
     }
     if (stringmatch(pattern,"unixsocketperm",1)) {
