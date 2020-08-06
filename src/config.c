@@ -326,6 +326,16 @@ void loadServerConfigFromString(char *config) {
             if (server.initial_dynamic_threshold < 1) {
                 err = "Invalid initial dynamic threshold"; goto loaderr;
             }
+        } else if (!strcasecmp(argv[0],"dynamic-threshold-min") && argc == 2) {
+            server.dynamic_threshold_min = atoi(argv[1]);
+            if (server.dynamic_threshold_min < 1) {
+                err = "Invalid initial dynamic threshold min"; goto loaderr;
+            }
+        } else if (!strcasecmp(argv[0],"dynamic-threshold-max") && argc == 2) {
+            server.dynamic_threshold_max = atoi(argv[1]);
+            if (server.dynamic_threshold_max < 1) {
+                err = "Invalid initial dynamic threshold max"; goto loaderr;
+            }
         } else if (!strcasecmp(argv[0],"static-threshold") && argc == 2) {
             server.static_threshold = atoi(argv[1]);
             if (server.static_threshold < 1) {
@@ -775,7 +785,14 @@ void loadServerConfigFromString(char *config) {
     }
 
     if (server.memory_alloc_policy == MEM_POLICY_RATIO) {
-
+        if (server.dynamic_threshold_min > server.initial_dynamic_threshold) {
+            err = "dynamic threshold: initial value must be greater than or equal to minimum value for ratio memory allocation policy";
+            goto loaderr;
+        }
+        if (server.dynamic_threshold_max < server.initial_dynamic_threshold) {
+            err = "dynamic threshold: initial value must be less than or equal to maximum value for ratio memory allocation policy";
+            goto loaderr;
+        }
     }
 
     sdsfreesplitres(lines,totlines);
@@ -1324,6 +1341,8 @@ void configGetCommand(client *c) {
     config_get_numerical_field("repl-diskless-sync-delay",server.repl_diskless_sync_delay);
     config_get_numerical_field("tcp-keepalive",server.tcpkeepalive);
     config_get_numerical_field("initial-dynamic-threshold",server.initial_dynamic_threshold);
+    config_get_numerical_field("dynamic-threshold-min",server.dynamic_threshold_min);
+    config_get_numerical_field("dynamic-threshold-max",server.dynamic_threshold_max);
     config_get_numerical_field("static-threshold",server.static_threshold);
 
     /* Bool (yes/no) values */
@@ -2051,6 +2070,8 @@ int rewriteConfig(char *path) {
     rewriteConfigEnumOption(state,"maxmemory-policy",server.maxmemory_policy,maxmemory_policy_enum,CONFIG_DEFAULT_MAXMEMORY_POLICY);
     rewriteConfigEnumOption(state,"memory-alloc-policy",server.memory_alloc_policy,memory_alloc_policy_enum,MEM_POLICY_ONLY_DRAM);
     rewriteConfigNumericalOption(state,"initial-dynamic-threshold",server.initial_dynamic_threshold,64);
+    rewriteConfigNumericalOption(state,"dynamic-threshold-min",server.dynamic_threshold_min,24);
+    rewriteConfigNumericalOption(state,"dynamic-threshold-max",server.dynamic_threshold_max,10000);
     rewriteConfigNumericalOption(state,"static-threshold",server.static_threshold,64);
     rewriteConfigNumericalOption(state,"maxmemory-samples",server.maxmemory_samples,CONFIG_DEFAULT_MAXMEMORY_SAMPLES);
     rewriteConfigNumericalOption(state,"lfu-log-factor",server.lfu_log_factor,CONFIG_DEFAULT_LFU_LOG_FACTOR);

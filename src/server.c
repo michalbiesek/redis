@@ -1417,6 +1417,8 @@ void initServerConfig(void) {
     server.hashtable_on_dram = 1;
     server.memory_alloc_policy = MEM_POLICY_ONLY_DRAM;
     server.initial_dynamic_threshold = 64;
+    server.dynamic_threshold_min = 24;
+    server.dynamic_threshold_max = 10000;
     server.static_threshold = 64;
     server.bpop_blocked_clients = 0;
     server.maxmemory = CONFIG_DEFAULT_MAXMEMORY;

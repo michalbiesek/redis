@@ -1135,6 +1135,8 @@ struct redisServer {
     int memory_alloc_policy;                  /* Policy for memory allocation */
     unsigned int static_threshold;            /* Persistent Memory static threshold */
     unsigned int initial_dynamic_threshold;   /* Persistent Memory initial dynamic threshold */
+    unsigned int dynamic_threshold_min;       /* Minimum value of dynamic threshold */
+    unsigned int dynamic_threshold_max;       /* Maximum value of dynamic threshold */
     int hashtable_on_dram;                    /* Keep hashtable always on DRAM */
     /* Blocked clients */
     unsigned int bpop_blocked_clients; /* Number of clients blocked by lists */
