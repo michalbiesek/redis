@@ -1,0 +1,29 @@
+language: c
+dist: bionic
+cache: ccache
+compiler:
+  - gcc
+  - clang
+
+addons:
+  apt:
+    packages:
+        - libjson-c-dev
+        - libkeyutils-dev
+        - libkmod-dev
+        - libnuma-dev
+        - libudev-dev
+        - tcl8.5
+
+before script:
+  - export CC=`which $CC`
+  - wget https://github.com/pmem/ndctl/archive/v68.tar.gz
+  - tar -xzvf v68.tar.gz
+  - pushd ndctl-68 && ./autogen.sh && ./configure --disable-docs --prefix=/usr && make && sudo make install && popd
+
+script:
+  - make gcov MALLOC=memkind
+  - ./runtest --clients 1
+
+after_success:
+  - bash <(curl -s https://codecov.io/bash) -p src
