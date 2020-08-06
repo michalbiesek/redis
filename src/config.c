@@ -313,6 +313,10 @@ void loadServerConfigFromString(char *config) {
             if (server.maxclients < 1) {
                 err = "Invalid max clients limit"; goto loaderr;
             }
+        } else if (!strcasecmp(argv[0],"hashtable-on-dram") && argc == 2) {
+            if ((server.hashtable_on_dram = yesnotoi(argv[1])) == -1) {
+                err = "argument must be 'yes' or 'no'"; goto loaderr;
+            }
         } else if (!strcasecmp(argv[0],"maxmemory") && argc == 2) {
             server.maxmemory = memtoll(argv[1],NULL);
         } else if (!strcasecmp(argv[0],"maxmemory-policy") && argc == 2) {
@@ -1325,6 +1329,8 @@ void configGetCommand(client *c) {
             server.aof_rewrite_incremental_fsync);
     config_get_bool_field("aof-load-truncated",
             server.aof_load_truncated);
+    config_get_bool_field("hashtable-on-dram",
+            server.hashtable_on_dram);
     config_get_bool_field("aof-use-rdb-preamble",
             server.aof_use_rdb_preamble);
     config_get_bool_field("lazyfree-lazy-eviction",

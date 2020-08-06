@@ -1414,6 +1414,7 @@ void initServerConfig(void) {
     server.active_defrag_running = 0;
     server.notify_keyspace_events = 0;
     server.maxclients = CONFIG_DEFAULT_MAX_CLIENTS;
+    server.hashtable_on_dram = 1;
     server.bpop_blocked_clients = 0;
     server.maxmemory = CONFIG_DEFAULT_MAXMEMORY;
     server.maxmemory_policy = CONFIG_DEFAULT_MAXMEMORY_POLICY;
@@ -1975,6 +1976,7 @@ void initServer(void) {
     scriptingInit(1);
     slowlogInit();
     latencyMonitorInit();
+    dictSetAllocPolicy(server.hashtable_on_dram);
     bioInit();
     server.initial_memory_usage = zmalloc_used_memory();
 }
