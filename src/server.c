@@ -880,6 +880,13 @@ void databasesCron(void) {
         expireSlaveKeys();
     }
 
+    /* Adjust PMEM threshold. */
+    if (server.memory_alloc_policy == MEM_POLICY_RATIO) {
+        run_with_period(server.ratio_check_period) {
+            adjustPmemThresholdCycle();
+        }
+    }
+
     /* Defrag keys gradually. */
     if (server.active_defrag_enabled)
         activeDefragCycle();
@@ -1975,6 +1982,7 @@ void initServer(void) {
     scriptingInit(1);
     slowlogInit();
     latencyMonitorInit();
+    pmemThresholdInit();
     bioInit();
     server.initial_memory_usage = zmalloc_used_memory();
 }
