@@ -82,6 +82,9 @@
 #if defined(USE_JEMALLOC) && defined(JEMALLOC_FRAG_HINT)
 #define HAVE_DEFRAG
 #endif
+#if defined(USE_MEMKIND)
+#define HAVE_DEFRAG_MEMKIND
+#endif
 
 void *zmalloc(size_t size);
 void *zcalloc(size_t size);
@@ -94,6 +97,7 @@ size_t zmalloc_used_pmem_memory(void);
 void zmalloc_set_oom_handler(void (*oom_handler)(size_t));
 float zmalloc_get_fragmentation_ratio(size_t rss);
 size_t zmalloc_get_rss(void);
+int zmalloc_get_allocator_info(size_t *allocated, size_t *active, size_t *resident);
 size_t zmalloc_get_private_dirty(long pid);
 size_t zmalloc_get_smap_bytes_by_field(char *field, long pid);
 size_t zmalloc_get_memory_size(void);
