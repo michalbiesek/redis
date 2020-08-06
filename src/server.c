@@ -1983,6 +1983,7 @@ void initServer(void) {
     slowlogInit();
     latencyMonitorInit();
     pmemThresholdInit();
+    dictSetAllocPolicy(server.hashtable_on_dram);
     bioInit();
     server.initial_memory_usage = zmalloc_used_memory();
 }
