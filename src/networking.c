@@ -105,8 +105,8 @@ client *createClient(int fd) {
     c->fd = fd;
     c->name = NULL;
     c->bufpos = 0;
-    c->querybuf = sdsempty();
-    c->pending_querybuf = sdsempty();
+    c->querybuf = sdsdramempty();
+    c->pending_querybuf = sdsdramempty();
     c->querybuf_peak = 0;
     c->reqtype = 0;
     c->argc = 0;
