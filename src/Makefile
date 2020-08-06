@@ -60,6 +60,9 @@ ifeq ($(USE_JEMALLOC),no)
 	MALLOC=libc
 endif
 
+ifeq ($(USE_MEMKIND),yes)
+	MALLOC=memkind
+endif
 # Override default settings if possible
 -include .make-settings
 
@@ -123,6 +126,12 @@ ifeq ($(MALLOC),jemalloc)
 	DEPENDENCY_TARGETS+= jemalloc
 	FINAL_CFLAGS+= -DUSE_JEMALLOC -I../deps/jemalloc/include
 	FINAL_LIBS+= ../deps/jemalloc/lib/libjemalloc.a
+endif
+
+ifeq ($(MALLOC),memkind)
+	DEPENDENCY_TARGETS+= memkind
+	FINAL_CFLAGS+= -DUSE_MEMKIND -I../deps/memkind/include
+	FINAL_LIBS+= ../deps/memkind/.libs/libmemkind.a -ldaxctl -lnuma -ldl
 endif
 
 REDIS_CC=$(QUIET_CC)$(CC) $(FINAL_CFLAGS)
