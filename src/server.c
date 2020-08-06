@@ -1415,6 +1415,7 @@ void initServerConfig(void) {
     server.notify_keyspace_events = 0;
     server.maxclients = CONFIG_DEFAULT_MAX_CLIENTS;
     server.hashtable_on_dram = 1;
+    server.memory_alloc_policy = MEM_POLICY_ONLY_DRAM;
     server.bpop_blocked_clients = 0;
     server.maxmemory = CONFIG_DEFAULT_MAXMEMORY;
     server.maxmemory_policy = CONFIG_DEFAULT_MAXMEMORY_POLICY;

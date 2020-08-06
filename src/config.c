@@ -91,6 +91,14 @@ configEnum aof_fsync_enum[] = {
     {NULL, 0}
 };
 
+configEnum memory_alloc_policy_enum[] = {
+    {"only-dram", MEM_POLICY_ONLY_DRAM},
+    {"only-pmem", MEM_POLICY_ONLY_PMEM},
+    {"threshold", MEM_POLICY_THRESHOLD},
+    {"ratio", MEM_POLICY_RATIO},
+    {NULL, 0}
+};
+
 /* Output buffer limits presets. */
 clientBufferLimitsConfig clientBufferLimitsDefaults[CLIENT_TYPE_OBUF_COUNT] = {
     {0, 0, 0}, /* normal */
@@ -756,6 +764,10 @@ void loadServerConfigFromString(char *config) {
         goto loaderr;
     }
 
+    if (server.memory_alloc_policy == MEM_POLICY_RATIO) {
+
+    }
+
     sdsfreesplitres(lines,totlines);
     return;
 
@@ -1353,6 +1365,8 @@ void configGetCommand(client *c) {
             server.aof_fsync,aof_fsync_enum);
     config_get_enum_field("syslog-facility",
             server.syslog_facility,syslog_facility_enum);
+    config_get_enum_field("memory-alloc-policy",
+            server.memory_alloc_policy,memory_alloc_policy_enum);
 
     /* Everything we can't handle with macros follows. */
 
@@ -2023,6 +2037,7 @@ int rewriteConfig(char *path) {
     rewriteConfigBytesOption(state,"proto-max-bulk-len",server.proto_max_bulk_len,CONFIG_DEFAULT_PROTO_MAX_BULK_LEN);
     rewriteConfigBytesOption(state,"client-query-buffer-limit",server.client_max_querybuf_len,PROTO_MAX_QUERYBUF_LEN);
     rewriteConfigEnumOption(state,"maxmemory-policy",server.maxmemory_policy,maxmemory_policy_enum,CONFIG_DEFAULT_MAXMEMORY_POLICY);
+    rewriteConfigEnumOption(state,"memory-alloc-policy",server.memory_alloc_policy,memory_alloc_policy_enum,MEM_POLICY_ONLY_DRAM);
     rewriteConfigNumericalOption(state,"maxmemory-samples",server.maxmemory_samples,CONFIG_DEFAULT_MAXMEMORY_SAMPLES);
     rewriteConfigNumericalOption(state,"lfu-log-factor",server.lfu_log_factor,CONFIG_DEFAULT_LFU_LOG_FACTOR);
     rewriteConfigNumericalOption(state,"lfu-decay-time",server.lfu_decay_time,CONFIG_DEFAULT_LFU_DECAY_TIME);

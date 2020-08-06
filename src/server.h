@@ -577,6 +577,12 @@ typedef struct RedisModuleDigest {
 #define OBJ_ENCODING_EMBSTR 8  /* Embedded sds string encoding */
 #define OBJ_ENCODING_QUICKLIST 9 /* Encoded as linked list of ziplists */
 
+/* Memory allocation policy states */
+#define MEM_POLICY_ONLY_DRAM 0          /* only use DRAM */
+#define MEM_POLICY_ONLY_PMEM 1          /* only use PMEM */
+#define MEM_POLICY_RATIO     2          /* use DRAM and PMEM - ratio variant*/
+#define MEM_POLICY_THRESHOLD 3          /* use DRAM and PMEM - threshold variant*/
+
 #define LRU_BITS 24
 #define LRU_CLOCK_MAX ((1<<LRU_BITS)-1) /* Max value of obj->lru */
 #define LRU_CLOCK_RESOLUTION 1000 /* LRU clock resolution in ms */
@@ -1125,6 +1131,8 @@ struct redisServer {
     int lfu_log_factor;             /* LFU logarithmic counter factor. */
     int lfu_decay_time;             /* LFU counter decay factor. */
     long long proto_max_bulk_len;   /* Protocol bulk length maximum size. */
+    /* PMEM */
+    int memory_alloc_policy;                  /* Policy for memory allocation */
     int hashtable_on_dram;                    /* Keep hashtable always on DRAM */
     /* Blocked clients */
     unsigned int bpop_blocked_clients; /* Number of clients blocked by lists */
