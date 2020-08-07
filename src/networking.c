@@ -78,7 +78,7 @@ void linkClient(client *c) {
 }
 
 client *createClient(int fd) {
-    client *c = zmalloc(sizeof(client));
+    client *c = zmalloc_dram(sizeof(client));
 
     /* passing -1 as fd it is possible to create a non connected client.
      * This is useful since all the commands needs to be executed
@@ -881,10 +881,10 @@ void freeClient(client *c) {
     /* Release other dynamically allocated client structure fields,
      * and finally release the client structure itself. */
     if (c->name) decrRefCount(c->name);
-    zfree(c->argv);
+    zfree_dram(c->argv);
     freeClientMultiState(c);
     sdsfree(c->peerid);
-    zfree(c);
+    zfree_dram(c);
 }
 
 /* Schedule a client to free it at a safe time in the serverCron() function.
@@ -1125,8 +1125,8 @@ int processInlineBuffer(client *c) {
 
     /* Setup argv array on client structure */
     if (argc) {
-        if (c->argv) zfree(c->argv);
-        c->argv = zmalloc(sizeof(robj*)*argc);
+        if (c->argv) zfree_dram(c->argv);
+        c->argv = zmalloc_dram(sizeof(robj*)*argc);
     }
 
     /* Create redis objects for all arguments. */
@@ -1227,8 +1227,8 @@ int processMultibulkBuffer(client *c) {
         c->multibulklen = ll;
 
         /* Setup argv array on client structure */
-        if (c->argv) zfree(c->argv);
-        c->argv = zmalloc(sizeof(robj*)*c->multibulklen);
+        if (c->argv) zfree_dram(c->argv);
+        c->argv = zmalloc_dram(sizeof(robj*)*c->multibulklen);
     }
 
     serverAssertWithInfo(c,NULL,c->multibulklen > 0);
@@ -1773,7 +1773,7 @@ void rewriteClientCommandVector(client *c, int argc, ...) {
     int j;
     robj **argv; /* The new argument vector */
 
-    argv = zmalloc(sizeof(robj*)*argc);
+    argv = zmalloc_dram(sizeof(robj*)*argc);
     va_start(ap,argc);
     for (j = 0; j < argc; j++) {
         robj *a;
@@ -1786,7 +1786,7 @@ void rewriteClientCommandVector(client *c, int argc, ...) {
      * sure that if the same objects are reused in the new vector the
      * refcount gets incremented before it gets decremented. */
     for (j = 0; j < c->argc; j++) decrRefCount(c->argv[j]);
-    zfree(c->argv);
+    zfree_dram(c->argv);
     /* Replace argv and argc with our new versions. */
     c->argv = argv;
     c->argc = argc;
@@ -1798,7 +1798,7 @@ void rewriteClientCommandVector(client *c, int argc, ...) {
 /* Completely replace the client command vector with the provided one. */
 void replaceClientCommandVector(client *c, int argc, robj **argv) {
     freeClientArgv(c);
-    zfree(c->argv);
+    zfree_dram(c->argv);
     c->argv = argv;
     c->argc = argc;
     c->cmd = lookupCommandOrOriginal(c->argv[0]->ptr);
@@ -1820,7 +1820,7 @@ void rewriteClientCommandArgument(client *c, int i, robj *newval) {
     robj *oldval;
 
     if (i >= c->argc) {
-        c->argv = zrealloc(c->argv,sizeof(robj*)*(i+1));
+        c->argv = zrealloc_dram(c->argv,sizeof(robj*)*(i+1));
         c->argc = i+1;
         c->argv[i] = NULL;
     }
