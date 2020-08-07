@@ -880,6 +880,13 @@ void databasesCron(void) {
         expireSlaveKeys();
     }
 
+    /* Adjust PMEM threshold. */
+    if (server.memory_alloc_policy == MEM_POLICY_RATIO) {
+        run_with_period(server.ratio_check_period) {
+            adjustPmemThresholdCycle();
+        }
+    }
+
     /* Defrag keys gradually. */
     if (server.active_defrag_enabled)
         activeDefragCycle();
@@ -1416,6 +1423,7 @@ void initServerConfig(void) {
     server.maxclients = CONFIG_DEFAULT_MAX_CLIENTS;
     server.hashtable_on_dram = 1;
     server.memory_alloc_policy = MEM_POLICY_ONLY_DRAM;
+    server.ratio_check_period = 100;
     server.initial_dynamic_threshold = 64;
     server.dynamic_threshold_min = 24;
     server.dynamic_threshold_max = 10000;

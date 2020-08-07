@@ -350,6 +350,11 @@ void loadServerConfigFromString(char *config) {
             if (server.static_threshold < 1) {
                 err = "Invalid initial static threshold"; goto loaderr;
             }
+        } else if (!strcasecmp(argv[0],"memory-ratio-check-period") && argc == 2) {
+            server.ratio_check_period = atoi(argv[1]);
+            if (server.ratio_check_period < 1) {
+                err = "Invalid number of memory ratio check period"; goto loaderr;
+            }
         } else if (!strcasecmp(argv[0],"hashtable-on-dram") && argc == 2) {
             if ((server.hashtable_on_dram = yesnotoi(argv[1])) == -1) {
                 err = "argument must be 'yes' or 'no'"; goto loaderr;
@@ -1353,6 +1358,7 @@ void configGetCommand(client *c) {
     config_get_numerical_field("cluster-slave-validity-factor",server.cluster_slave_validity_factor);
     config_get_numerical_field("repl-diskless-sync-delay",server.repl_diskless_sync_delay);
     config_get_numerical_field("tcp-keepalive",server.tcpkeepalive);
+    config_get_numerical_field("memory-ratio-check-period",server.ratio_check_period);
     config_get_numerical_field("initial-dynamic-threshold",server.initial_dynamic_threshold);
     config_get_numerical_field("dynamic-threshold-min",server.dynamic_threshold_min);
     config_get_numerical_field("dynamic-threshold-max",server.dynamic_threshold_max);
@@ -2089,6 +2095,7 @@ int rewriteConfig(char *path) {
     rewriteConfigBytesOption(state,"client-query-buffer-limit",server.client_max_querybuf_len,PROTO_MAX_QUERYBUF_LEN);
     rewriteConfigEnumOption(state,"maxmemory-policy",server.maxmemory_policy,maxmemory_policy_enum,CONFIG_DEFAULT_MAXMEMORY_POLICY);
     rewriteConfigEnumOption(state,"memory-alloc-policy",server.memory_alloc_policy,memory_alloc_policy_enum,MEM_POLICY_ONLY_DRAM);
+    rewriteConfigNumericalOption(state,"memory-ratio-check-period",server.ratio_check_period,100);
     rewriteConfigNumericalOption(state,"initial-dynamic-threshold",server.initial_dynamic_threshold,64);
     rewriteConfigNumericalOption(state,"dynamic-threshold-min",server.dynamic_threshold_min,24);
     rewriteConfigNumericalOption(state,"dynamic-threshold-max",server.dynamic_threshold_max,10000);
