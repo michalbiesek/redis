@@ -103,7 +103,7 @@ static void zfree_pmem(void *ptr) {
     zmalloc_pmem_not_available();
 }
 
-static void *zmalloc_pmem(size_t size) {
+void *zmalloc_pmem(size_t size) {
     (void)(size);
     zmalloc_pmem_not_available();
     return NULL;
@@ -221,7 +221,7 @@ static void zfree_pmem(void *ptr) {
 #endif
 }
 
-static void *zmalloc_pmem(size_t size) {
+void *zmalloc_pmem(size_t size) {
 
 //    #define  TABLICA_SIZE 100
 //    static int tablica_test[TABLICA_SIZE] = {0};

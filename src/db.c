@@ -206,7 +206,7 @@ static size_t db_test_dram =0;
  *
  * The program is aborted if the key already exists. */
 void dbAdd(redisDb *db, robj *key, robj *val) {
-    sds copy = sdsdup(key->ptr);
+    sds copy = sdsdupPM(key->ptr);
 //    int key_ptr_status = (zmalloc_is_pmem(key->ptr)==1);
 //    int sds_dup_status = (zmalloc_is_pmem(copy)==1);
 

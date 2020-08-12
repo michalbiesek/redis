@@ -111,6 +111,7 @@ void *zmalloc_dram(size_t size);
 void *zcalloc_dram(size_t size);
 void *zrealloc_dram(void *ptr, size_t size);
 int zmalloc_is_pmem(void * ptr);
+void *zmalloc_pmem(size_t size);
 #ifdef HAVE_DEFRAG
 void zfree_no_tcache(void *ptr);
 void *zmalloc_no_tcache(size_t size);
