@@ -38,6 +38,7 @@
 
 #define OBJ_MEMORY_GENERAL  0
 #define OBJ_MEMORY_DRAM     1
+#define OBJ_MEMORY_PMEM     2
 
 /* ===================== Creation and parsing of objects ==================== */
 
@@ -81,9 +82,57 @@ robj *createRawStringObject(const char *ptr, size_t len) {
     return createObject(OBJ_STRING, sdsnewlen(ptr,len));
 }
 
+static robj *createCustomRawStringObject(const char *ptr, size_t len) {
+    int test = -1;
+    int type;
+    sds ptr_2 = sdsnewlen_with_info(ptr,len, &test);
+    if (test ==1)
+        type = OBJ_STRING;
+    else if (test ==2)
+        type = OBJ_STRING_PMEM;
+    else 
+        serverAssert(NULL);
+    return createObject(type, ptr_2);
+}
+
 /* Create a string object with encoding OBJ_ENCODING_EMBSTR, that is
  * an object where the sds string is actually an unmodifiable string
  * allocated in the same chunk as the object itself. */
+static robj *createEmbeddedStringObjectCustom(const char *ptr, size_t len) {
+    int location = -1;
+    robj *o = zmalloc_with_info(sizeof(robj)+sizeof(struct sdshdr8)+len+1, &location);
+    struct sdshdr8 *sh = (void*)(o+1);
+    if (location ==1)
+         o->type = OBJ_STRING;
+    else if (location ==2)
+         o->type = OBJ_STRING_PMEM;
+    else 
+        serverAssert(NULL);
+   
+    o->encoding = OBJ_ENCODING_EMBSTR;
+    o->ptr = sh+1;
+    o->refcount = 1;
+
+    if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
+        o->lru = (LFUGetTimeInMinutes()<<8) | LFU_INIT_VAL;
+    } else {
+        o->lru = LRU_CLOCK();
+    }
+
+    sh->len = len;
+    sh->alloc = len;
+    sh->flags = SDS_TYPE_8;
+    if (ptr == SDS_NOINIT)
+        sh->buf[len] = '\0';
+    else if (ptr) {
+        memcpy(sh->buf,ptr,len);
+        sh->buf[len] = '\0';
+    } else {
+        memset(sh->buf,0,len+1);
+    }
+    return o;
+}
+
 robj *createEmbeddedStringObject(const char *ptr, size_t len) {
     robj *o = zmalloc(sizeof(robj)+sizeof(struct sdshdr8)+len+1);
     struct sdshdr8 *sh = (void*)(o+1);
@@ -124,6 +173,13 @@ robj *createStringObject(const char *ptr, size_t len) {
         return createEmbeddedStringObject(ptr,len);
     else
         return createRawStringObject(ptr,len);
+}
+
+robj *createCustomStringObject(const char *ptr, size_t len) {
+    if (len <= OBJ_ENCODING_EMBSTR_SIZE_LIMIT)
+        return createEmbeddedStringObjectCustom(ptr,len);
+    else
+        return createCustomRawStringObject(ptr,len);
 }
 
 /* Create a string object from a long long value. When possible returns a
@@ -283,7 +339,13 @@ robj *createModuleObject(moduleType *mt, void *value) {
 
 void freeStringObjectOptim(robj *o) {
     if (o->encoding == OBJ_ENCODING_RAW) {
-        sdsfreeOptim(o->ptr);
+        sdsfreeOptim(o->ptr,1);
+    }
+}
+
+void freeStringObjectOptimPMEM(robj *o) {
+    if (o->encoding == OBJ_ENCODING_RAW) {
+        sdsfreeOptim(o->ptr,2);
     }
 }
 
@@ -371,6 +433,7 @@ static void _decrRefCount(robj *o, int on_dram) {
     if (o->refcount == 1) {
         switch(o->type) {
         case OBJ_STRING: freeStringObjectOptim(o); break;
+        case OBJ_STRING_PMEM: freeStringObjectOptimPMEM(o); break;
         case OBJ_LIST: freeListObject(o); break;
         case OBJ_SET: freeSetObject(o); break;
         case OBJ_ZSET: freeZsetObject(o); break;
@@ -379,7 +442,11 @@ static void _decrRefCount(robj *o, int on_dram) {
         case OBJ_STREAM: freeStreamObject(o); break;
         default: serverPanic("Unknown object type"); break;
         }
-        if (on_dram == OBJ_MEMORY_GENERAL || o->encoding == OBJ_ENCODING_EMBSTR) {
+        if (o->encoding == OBJ_ENCODING_EMBSTR) {
+            if (o->type == OBJ_STRING) zfree_dram(o);
+            else if (o->type== OBJ_STRING_PMEM) zfree_pmem(o);
+            else zfree(o);
+        } else if (on_dram == OBJ_MEMORY_GENERAL) {
             zfree(o);
         } else {
             zfree_dram(o);
@@ -430,12 +497,20 @@ int checkType(client *c, robj *o, int type) {
     return 0;
 }
 
+int checkTypePMEMvariant(client *c, robj *o) {
+    if (o->type == OBJ_STRING || o->type == OBJ_STRING_PMEM) {
+        return 0;
+    }
+    addReply(c,shared.wrongtypeerr);
+    return 1;
+}
+
 int isSdsRepresentableAsLongLong(sds s, long long *llval) {
     return string2ll(s,sdslen(s),llval) ? C_OK : C_ERR;
 }
 
 int isObjectRepresentableAsLongLong(robj *o, long long *llval) {
-    serverAssertWithInfo(NULL,o,o->type == OBJ_STRING);
+  //  serverAssertWithInfo(NULL,o,o->type == OBJ_STRING);
     if (o->encoding == OBJ_ENCODING_INT) {
         if (llval) *llval = (long) o->ptr;
         return C_OK;
@@ -466,7 +541,7 @@ robj *tryObjectEncoding(robj *o) {
      * in this function. Other types use encoded memory efficient
      * representations but are handled by the commands implementing
      * the type. */
-    serverAssertWithInfo(NULL,o,o->type == OBJ_STRING);
+  //  serverAssertWithInfo(NULL,o,o->type == OBJ_STRING);
 
     /* We try some specialized encoding only for objects that are
      * RAW or EMBSTR encoded, in other words objects that are still
@@ -545,7 +620,7 @@ robj *getDecodedObject(robj *o) {
         incrRefCount(o);
         return o;
     }
-    if (o->type == OBJ_STRING && o->encoding == OBJ_ENCODING_INT) {
+    if ((o->type == OBJ_STRING || o->type == OBJ_STRING_PMEM) && o->encoding == OBJ_ENCODING_INT) {
         char buf[32];
 
         ll2string(buf,32,(long)o->ptr);
@@ -568,7 +643,7 @@ robj *getDecodedObject(robj *o) {
 #define REDIS_COMPARE_COLL (1<<1)
 
 int compareStringObjectsWithFlags(robj *a, robj *b, int flags) {
-    serverAssertWithInfo(NULL,a,a->type == OBJ_STRING && b->type == OBJ_STRING);
+ //   serverAssertWithInfo(NULL,a,a->type == OBJ_STRING && b->type == OBJ_STRING);
     char bufa[128], bufb[128], *astr, *bstr;
     size_t alen, blen, minlen;
 
@@ -625,7 +700,7 @@ int equalStringObjects(robj *a, robj *b) {
 }
 
 size_t stringObjectLen(robj *o) {
-    serverAssertWithInfo(NULL,o,o->type == OBJ_STRING);
+  //  serverAssertWithInfo(NULL,o,o->type == OBJ_STRING);
     if (sdsEncodedObject(o)) {
         return sdslen(o->ptr);
     } else {
@@ -639,7 +714,7 @@ int getDoubleFromObject(const robj *o, double *target) {
     if (o == NULL) {
         value = 0;
     } else {
-        serverAssertWithInfo(NULL,o,o->type == OBJ_STRING);
+    //    serverAssertWithInfo(NULL,o,o->type == OBJ_STRING);
         if (sdsEncodedObject(o)) {
             if (!string2d(o->ptr, sdslen(o->ptr), &value))
                 return C_ERR;
@@ -673,7 +748,7 @@ int getLongDoubleFromObject(robj *o, long double *target) {
     if (o == NULL) {
         value = 0;
     } else {
-        serverAssertWithInfo(NULL,o,o->type == OBJ_STRING);
+    //    serverAssertWithInfo(NULL,o,o->type == OBJ_STRING);
         if (sdsEncodedObject(o)) {
             if (!string2ld(o->ptr, sdslen(o->ptr), &value))
                 return C_ERR;
@@ -707,7 +782,7 @@ int getLongLongFromObject(robj *o, long long *target) {
     if (o == NULL) {
         value = 0;
     } else {
-        serverAssertWithInfo(NULL,o,o->type == OBJ_STRING);
+    //    serverAssertWithInfo(NULL,o,o->type == OBJ_STRING);
         if (sdsEncodedObject(o)) {
             if (string2ll(o->ptr,sdslen(o->ptr),&value) == 0) return C_ERR;
         } else if (o->encoding == OBJ_ENCODING_INT) {
@@ -802,7 +877,7 @@ size_t objectComputeSize(robj *o, size_t sample_size) {
     struct dictEntry *de;
     size_t asize = 0, elesize = 0, samples = 0;
 
-    if (o->type == OBJ_STRING) {
+    if (o->type == OBJ_STRING || o->type == OBJ_STRING_PMEM) {
         if(o->encoding == OBJ_ENCODING_INT) {
             asize = sizeof(*o);
         } else if(o->encoding == OBJ_ENCODING_RAW) {

@@ -97,7 +97,7 @@ static int zmalloc_is_pmem(void * ptr) {
     return DRAM_LOCATION;
 }
 
-static void zfree_pmem(void *ptr) {
+void zfree_pmem(void *ptr) {
     (void)(ptr);
     zmalloc_pmem_not_available();
 }
@@ -183,7 +183,7 @@ static int zmalloc_is_pmem(void * ptr) {
     return (temp_kind == MEMKIND_DEFAULT) ? DRAM_LOCATION : PMEM_LOCATION;
 }
 
-static void zfree_pmem(void *ptr) {
+void zfree_pmem(void *ptr) {
 #ifndef HAVE_MALLOC_SIZE
     void *realptr;
     size_t oldsize;
@@ -264,6 +264,15 @@ static void *zrealloc_pmem(void *ptr, size_t size) {
 
 void *zmalloc(size_t size) {
     return (size < pmem_threshold) ? zmalloc_dram(size) : zmalloc_pmem(size);
+}
+
+void *zmalloc_with_info(size_t size, int* location) {
+    if (size < pmem_threshold) {
+        *location = 1;
+        return zmalloc_dram(size);
+    } 
+    *location = 2;
+    return zmalloc_pmem(size);
 }
 
 /* Allocation and free functions that bypass the thread cache

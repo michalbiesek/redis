@@ -107,7 +107,7 @@ static inline char sdsReqType(size_t string_size) {
  * You can print the string with printf() as there is an implicit \0 at the
  * end of the string. However the string is binary safe and can contain
  * \0 characters in the middle, as the length is stored in the sds header. */
-static sds _sdsnewlen(const void *init, size_t initlen, int on_dram) {
+static sds _sdsnewlen(const void *init, size_t initlen, int on_dram, int* info_variant) {
     void *sh;
     sds s;
     char type = sdsReqType(initlen);
@@ -116,9 +116,20 @@ static sds _sdsnewlen(const void *init, size_t initlen, int on_dram) {
     if (type == SDS_TYPE_5 && initlen == 0) type = SDS_TYPE_8;
     int hdrlen = sdsHdrSize(type);
     unsigned char *fp; /* flags pointer. */
+    
+    if (on_dram == SDS_DRAM_VARIANT){
+        sh = s_dram_malloc(hdrlen+initlen+1);
+        if (info_variant) {
+         *info_variant = 1;
+        }
+    }
+    else if (info_variant){
+        sh = s_malloc_with_info(hdrlen+initlen+1, info_variant);
+    }
+    else {
+        sh = s_malloc(hdrlen+initlen+1);
+    }
 
-    sh = (on_dram == SDS_DRAM_VARIANT) ? s_dram_malloc(hdrlen+initlen+1)
-                                       : s_malloc(hdrlen+initlen+1);
     if (sh == NULL) return NULL;
     if (init==SDS_NOINIT)
         init = NULL;
@@ -166,12 +177,16 @@ static sds _sdsnewlen(const void *init, size_t initlen, int on_dram) {
     return s;
 }
 
+sds sdsnewlen_with_info(const void *init, size_t initlen, int*info) {
+    return _sdsnewlen(init, initlen, SDS_GENERAL_VARIANT, info);
+}
+
 sds sdsnewlen(const void *init, size_t initlen) {
-    return _sdsnewlen(init, initlen, SDS_GENERAL_VARIANT);
+    return _sdsnewlen(init, initlen, SDS_GENERAL_VARIANT, NULL);
 }
 
 static sds sdsdramnewlen(const void *init, size_t initlen) {
-    return _sdsnewlen(init, initlen, SDS_DRAM_VARIANT);
+    return _sdsnewlen(init, initlen, SDS_DRAM_VARIANT, NULL);
 }
 
 /* Create an empty (zero length) sds string. Even in this case the string
@@ -203,9 +218,14 @@ void sdsfree(sds s) {
     s_free((char*)s-sdsHdrSize(s[-1]));
 }
 
-void sdsfreeOptim(sds s) {
+void sdsfreeOptim(sds s, unsigned int type) {
     if (s == NULL) return;
-    s_free((char*)s-sdsHdrSizeOptim(s));
+    if (type == 1)
+        s_free_dram((char*)s-sdsHdrSizeOptim(s));
+    else if (type == 2)
+        s_free_pmem((char*)s-sdsHdrSizeOptim(s));
+    else
+        s_free((char*)s-sdsHdrSizeOptim(s));
 }
 
 /* Set the sds string length to the length as obtained with strlen(), so
