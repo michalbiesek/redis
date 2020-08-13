@@ -45,6 +45,7 @@
 #define DICT_NOTUSED(V) ((void) V)
 
 typedef struct dictEntry {
+    uint64_t hash;
     void *key;
     union {
         void *val;
