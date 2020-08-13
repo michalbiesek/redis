@@ -94,6 +94,8 @@ void zfree_dram(void *ptr);
 char *zstrdup(const char *s);
 size_t zmalloc_used_memory(void);
 size_t zmalloc_used_pmem_memory(void);
+size_t zmalloc_allocated_pmem_memory(void);
+size_t zmalloc_freed_pmem_memory(void);
 void zmalloc_set_oom_handler(void (*oom_handler)(size_t));
 size_t zmalloc_get_rss(void);
 int zmalloc_get_allocator_info(size_t *allocated, size_t *active, size_t *resident);
@@ -108,7 +110,7 @@ size_t zmalloc_get_threshold(void);
 void *zmalloc_dram(size_t size);
 void *zcalloc_dram(size_t size);
 void *zrealloc_dram(void *ptr, size_t size);
-
+int zmalloc_is_pmem(void *ptr);
 #ifdef HAVE_DEFRAG
 void zfree_no_tcache(void *ptr);
 void *zmalloc_no_tcache(size_t size);
