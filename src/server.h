@@ -616,6 +616,8 @@ typedef struct redisObject {
                             * LFU data (least significant 8 bits frequency
                             * and most significant 16 bits access time). */
     int refcount;
+    unsigned location:2;
+    unsigned unused:30;
     void *ptr;
 } robj;
 
@@ -1763,6 +1765,7 @@ void freeZsetObject(robj *o);
 void freeHashObject(robj *o);
 robj *createObject(int type, void *ptr);
 robj *createStringObject(const char *ptr, size_t len);
+robj *createCustomStringObject(const char *ptr, size_t len);
 robj *createRawStringObject(const char *ptr, size_t len);
 robj *createEmbeddedStringObject(const char *ptr, size_t len);
 robj *dupStringObject(const robj *o);

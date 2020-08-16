@@ -38,6 +38,7 @@
 
 #define OBJ_MEMORY_GENERAL  0
 #define OBJ_MEMORY_DRAM     1
+#define OBJ_MEMORY_PMEM     2
 
 /* ===================== Creation and parsing of objects ==================== */
 
@@ -47,6 +48,27 @@ robj *createObject(int type, void *ptr) {
     o->encoding = OBJ_ENCODING_RAW;
     o->ptr = ptr;
     o->refcount = 1;
+    o->location = OBJ_MEMORY_GENERAL;
+    o->unused = 0;
+
+    /* Set the LRU to the current lruclock (minutes resolution), or
+     * alternatively the LFU counter. */
+    if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
+        o->lru = (LFUGetTimeInMinutes()<<8) | LFU_INIT_VAL;
+    } else {
+        o->lru = LRU_CLOCK();
+    }
+    return o;
+}
+
+robj *createObjectWithInfo(int type, void *ptr, int info) {
+    robj *o = zmalloc_dram(sizeof(*o));
+    o->type = type;
+    o->encoding = OBJ_ENCODING_RAW;
+    o->ptr = ptr;
+    o->refcount = 1;
+    o->location = info;
+    o->unused = 0;
 
     /* Set the LRU to the current lruclock (minutes resolution), or
      * alternatively the LFU counter. */
@@ -81,9 +103,46 @@ robj *createRawStringObject(const char *ptr, size_t len) {
     return createObject(OBJ_STRING, sdsnewlen(ptr,len));
 }
 
+static robj *createCustomRawStringObject(const char *ptr, size_t len) {
+    int test = -1;
+    sds ptr_2 = sdsnewlen_with_info(ptr,len, &test);
+    return createObjectWithInfo(OBJ_STRING, ptr_2, test);
+}
+
 /* Create a string object with encoding OBJ_ENCODING_EMBSTR, that is
  * an object where the sds string is actually an unmodifiable string
  * allocated in the same chunk as the object itself. */
+static robj *createEmbeddedStringObjectCustom(const char *ptr, size_t len) {
+    int location = -1;
+    robj *o = zmalloc_with_info(sizeof(robj)+sizeof(struct sdshdr8)+len+1, &location);
+    struct sdshdr8 *sh = (void*)(o+1);
+
+    o->type = OBJ_STRING;
+    o->encoding = OBJ_ENCODING_EMBSTR;
+    o->ptr = sh+1;
+    o->refcount = 1;
+    o->unused = 0;
+    o->location = location;
+    if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
+        o->lru = (LFUGetTimeInMinutes()<<8) | LFU_INIT_VAL;
+    } else {
+        o->lru = LRU_CLOCK();
+    }
+
+    sh->len = len;
+    sh->alloc = len;
+    sh->flags = SDS_TYPE_8;
+    if (ptr == SDS_NOINIT)
+        sh->buf[len] = '\0';
+    else if (ptr) {
+        memcpy(sh->buf,ptr,len);
+        sh->buf[len] = '\0';
+    } else {
+        memset(sh->buf,0,len+1);
+    }
+    return o;
+}
+
 robj *createEmbeddedStringObject(const char *ptr, size_t len) {
     robj *o = zmalloc(sizeof(robj)+sizeof(struct sdshdr8)+len+1);
     struct sdshdr8 *sh = (void*)(o+1);
@@ -92,6 +151,8 @@ robj *createEmbeddedStringObject(const char *ptr, size_t len) {
     o->encoding = OBJ_ENCODING_EMBSTR;
     o->ptr = sh+1;
     o->refcount = 1;
+    o->unused = 0;
+    o->location = OBJ_MEMORY_GENERAL;
     if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
         o->lru = (LFUGetTimeInMinutes()<<8) | LFU_INIT_VAL;
     } else {
@@ -124,6 +185,13 @@ robj *createStringObject(const char *ptr, size_t len) {
         return createEmbeddedStringObject(ptr,len);
     else
         return createRawStringObject(ptr,len);
+}
+
+robj *createCustomStringObject(const char *ptr, size_t len) {
+    if (len <= OBJ_ENCODING_EMBSTR_SIZE_LIMIT)
+        return createEmbeddedStringObjectCustom(ptr,len);
+    else
+        return createCustomRawStringObject(ptr,len);
 }
 
 /* Create a string object from a long long value. When possible returns a
@@ -283,7 +351,7 @@ robj *createModuleObject(moduleType *mt, void *value) {
 
 void freeStringObjectOptim(robj *o) {
     if (o->encoding == OBJ_ENCODING_RAW) {
-        sdsfreeOptim(o->ptr);
+        sdsfreeOptim(o->ptr, o->location);
     }
 }
 
@@ -379,7 +447,11 @@ static void _decrRefCount(robj *o, int on_dram) {
         case OBJ_STREAM: freeStreamObject(o); break;
         default: serverPanic("Unknown object type"); break;
         }
-        if (on_dram == OBJ_MEMORY_GENERAL || o->encoding == OBJ_ENCODING_EMBSTR) {
+        if (o->encoding == OBJ_ENCODING_EMBSTR) {
+            if (o->location == 1) zfree_dram(o);
+            else if (o->location == 2) zfree_pmem(o);
+            else zfree(o);
+        } else if (on_dram == OBJ_MEMORY_GENERAL) {
             zfree(o);
         } else {
             zfree_dram(o);

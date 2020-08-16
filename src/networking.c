@@ -1718,7 +1718,7 @@ int processMultibulkBuffer(client *c) {
                 sdsclear(c->querybuf);
             } else {
                 c->argv[c->argc++] =
-                    createStringObject(c->querybuf+c->qb_pos,c->bulklen);
+                    createCustomStringObject(c->querybuf+c->qb_pos,c->bulklen);
                 c->qb_pos += c->bulklen+2;
             }
             c->bulklen = -1;
