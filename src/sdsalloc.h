@@ -43,6 +43,9 @@
 #define s_malloc zmalloc
 #define s_realloc zrealloc
 #define s_free zfree
+#define s_pmem_free zfree_pmem
+#define s_dram_free zfree_dram
 #define s_dram_malloc zmalloc_dram
+#define s_malloc_with_info zmalloc_with_info
 
 #endif
