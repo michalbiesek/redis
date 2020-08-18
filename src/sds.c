@@ -209,6 +209,10 @@ sds sdsdup(const sds s) {
     return sdsnewlen(s, sdslen(s));
 }
 
+sds sdsdupDRAM(const sds s) {
+    return sdsdramnewlen(s, sdslen(s));
+}
+
 /* Free an sds string. No operation is performed if 's' is NULL. */
 void sdsfree(sds s) {
     if (s == NULL) return;
