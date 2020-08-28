@@ -224,6 +224,7 @@ sds sdsnew(const char *init);
 sds sdsempty(void);
 sds sdsdramempty(void);
 sds sdsdup(const sds s);
+sds sdsdupDRAM(const sds s);
 void sdsfree(sds s);
 void sdsfreeOptim(sds s, int type);
 sds sdsgrowzero(sds s, size_t len);
