@@ -61,6 +61,13 @@
 #define HAVE_MALLOC_SIZE 1
 #define zmalloc_size(p) memkind_malloc_usable_size(NULL, p)
 
+#elif defined(USE_MEMKIND_MEMTIER)
+#define ZMALLOC_LIB "memkind_memtier"
+#include <errno.h>
+#include <memkind_memtier.h>
+#define HAVE_MALLOC_SIZE 1
+#define zmalloc_size(p) memtier_usable_size(p)
+
 #elif defined(__APPLE__)
 #include <malloc/malloc.h>
 #define HAVE_MALLOC_SIZE 1
@@ -82,10 +89,11 @@
 #if defined(USE_JEMALLOC) && defined(JEMALLOC_FRAG_HINT)
 #define HAVE_DEFRAG
 #endif
-#if defined(USE_MEMKIND)
+#if defined(USE_MEMKIND) || defined(USE_MEMKIND_MEMTIER)
 #define HAVE_DEFRAG_MEMKIND
 #endif
 
+void zmalloc_create_memtier(void);
 void *zmalloc(size_t size);
 void *zcalloc(size_t size);
 void *zrealloc(void *ptr, size_t size);
