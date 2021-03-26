@@ -69,7 +69,29 @@ void zlibc_free(void *ptr) {
 #define free(ptr) je_free(ptr)
 #define mallocx(size,flags) je_mallocx(size,flags)
 #define dallocx(ptr,flags) je_dallocx(ptr,flags)
+#elif defined(USE_MEMKIND)
+#define malloc(size) memkind_malloc(MEMKIND_DEFAULT,size)
+#define calloc(count,size) memkind_calloc(MEMKIND_DEFAULT,count,size)
+#define realloc(ptr,size) memkind_realloc(MEMKIND_DEFAULT,ptr,size)
+#define free(ptr) memkind_free(NULL,ptr)
+#elif defined(USE_MEMKIND_MEMTIER)
+struct memtier_tier *tier;
+#define malloc(size) memtier_tier_malloc(tier,size)
+#define calloc(count,size) memtier_tier_calloc(tier,count,size)
+#define realloc(ptr,size) memtier_tier_realloc(tier,ptr,size)
+#define free(ptr) memtier_free(ptr)
 #endif
+
+#if defined(USE_MEMKIND_MEMTIER)
+void zmalloc_create_memtier(void) {
+    tier = memtier_tier_new(MEMKIND_DEFAULT);
+}
+#else
+void zmalloc_create_memtier(void) {
+    return;
+}
+#endif
+
 
 #define update_zmalloc_stat_alloc(__n) do { \
     size_t _n = (__n); \
@@ -98,7 +120,11 @@ static void (*zmalloc_oom_handler)(size_t) = zmalloc_default_oom;
 void *zmalloc(size_t size) {
     void *ptr = malloc(size+PREFIX_SIZE);
 
+#if defined(USE_MEMKIND) || defined(USE_MEMKIND_MEMTIER)
+    if (!ptr && errno==ENOMEM) zmalloc_oom_handler(size);
+#else
     if (!ptr) zmalloc_oom_handler(size);
+#endif
 #ifdef HAVE_MALLOC_SIZE
     update_zmalloc_stat_alloc(zmalloc_size(ptr));
     return ptr;
@@ -385,7 +411,26 @@ int jemalloc_purge() {
     }
     return -1;
 }
+#elif defined(USE_MEMKIND) || defined(USE_MEMKIND_MEMTIER)
+int zmalloc_get_allocator_info(size_t *allocated,
+                               size_t *active,
+                               size_t *resident) {
+    memkind_update_cached_stats();
+    memkind_get_stat(NULL, MEMKIND_STAT_TYPE_RESIDENT, resident);
+    memkind_get_stat(NULL, MEMKIND_STAT_TYPE_ACTIVE, active);
+    memkind_get_stat(NULL, MEMKIND_STAT_TYPE_ALLOCATED, allocated);
+    return 1;
+}
 
+void set_jemalloc_bg_thread(int enable) {
+    char val = !!enable;
+    memkind_set_bg_threads(val);
+}
+
+int jemalloc_purge() {
+    //TODO extend memkind API?
+    return 0;
+}
 #else
 
 int zmalloc_get_allocator_info(size_t *allocated,

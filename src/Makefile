@@ -70,6 +70,14 @@ ifeq ($(USE_JEMALLOC),no)
 	MALLOC=libc
 endif
 
+ifeq ($(USE_MEMKIND),yes)
+	MALLOC=memkind
+endif
+
+ifeq ($(USE_MEMKIND_MEMTIER),yes)
+	MALLOC=memkind_memtier
+endif
+
 # Override default settings if possible
 -include .make-settings
 
@@ -206,6 +214,16 @@ ifeq ($(MALLOC),jemalloc)
 	DEPENDENCY_TARGETS+= jemalloc
 	FINAL_CFLAGS+= -DUSE_JEMALLOC -I../deps/jemalloc/include
 	FINAL_LIBS := ../deps/jemalloc/lib/libjemalloc.a $(FINAL_LIBS)
+endif
+
+ifeq ($(MALLOC),memkind)
+	FINAL_CFLAGS+= -DUSE_MEMKIND
+	FINAL_LIBS+= -lmemkind -ldaxctl
+endif
+
+ifeq ($(MALLOC),memkind_memtier)
+	FINAL_CFLAGS+= -DUSE_MEMKIND_MEMTIER
+	FINAL_LIBS+= -lmemkind -ldaxctl
 endif
 
 ifeq ($(BUILD_TLS),yes)
