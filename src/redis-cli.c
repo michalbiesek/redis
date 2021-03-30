@@ -8064,7 +8064,7 @@ static sds askPassword() {
 
 int main(int argc, char **argv) {
     int firstarg;
-
+    zmalloc_create_memtier();
     config.hostip = sdsnew("127.0.0.1");
     config.hostport = 6379;
     config.hostsocket = NULL;
