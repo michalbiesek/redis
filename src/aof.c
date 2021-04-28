@@ -1337,8 +1337,18 @@ ssize_t aofReadDiffFromParent(void) {
 
     while ((nread =
             read(server.aof_pipe_read_data_from_parent,buf,sizeof(buf))) > 0) {
-        serverLog(LL_NOTICE,"aofReadDiffFromParent sds_len %zu, nread %zu", sdslen(server.aof_child_diff), nread);
-        server.aof_child_diff = sdscatlen(server.aof_child_diff,buf,nread);
+        size_t curlen = sdslen(server.aof_child_diff);
+        serverLog(LL_NOTICE,"aofReadDiffFromParent sds_len %zu, nread %zu", curlen, nread);
+        server.aof_child_diff = sdsMakeRoomFor(server.aof_child_diff,nread);
+        if (server.aof_child_diff == NULL) {
+            serverLog(LL_NOTICE,"server.aof_child_diff is NULL!!!!");
+        }
+        if (sdsavail(server.aof_child_diff) >= (size_t)nread) {
+            serverLog(LL_NOTICE,"server.aof_child_diff don't change the size after sdsMakeRoomFor  curlen %zu nread %zu", curlen, nread);
+        }
+        memcpy(server.aof_child_diff+curlen, buf, nread);
+        sdssetlen(server.aof_child_diff, curlen+nread);
+        server.aof_child_diff[curlen+nread] = '\0';
         total += nread;
     }
     return total;
