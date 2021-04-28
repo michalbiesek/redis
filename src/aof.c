@@ -1337,6 +1337,7 @@ ssize_t aofReadDiffFromParent(void) {
 
     while ((nread =
             read(server.aof_pipe_read_data_from_parent,buf,sizeof(buf))) > 0) {
+        serverLog(LL_NOTICE,"aofReadDiffFromParent sds_len %zu, nread %zu", sdslen(server.aof_child_diff), nread);
         server.aof_child_diff = sdscatlen(server.aof_child_diff,buf,nread);
         total += nread;
     }
