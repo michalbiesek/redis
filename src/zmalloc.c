@@ -83,6 +83,7 @@ void zlibc_free(void *ptr) {
 #define realloc_dram(ptr,size) memkind_realloc(MEMKIND_DEFAULT,ptr,size)
 #define realloc_pmem(ptr,size) memkind_realloc(MEMKIND_DAX_KMEM,ptr,size)
 #define free_dram(ptr) memkind_free(MEMKIND_DEFAULT,ptr)
+#define free_fake(ptr) memkind_free(NULL,ptr)
 #define free_pmem(ptr) memkind_free(MEMKIND_DAX_KMEM,ptr)
 #endif
 
@@ -93,16 +94,12 @@ static void zmalloc_pmem_not_available(void) {
     abort();
 }
 #define free_dram(ptr) free(ptr)
+#define free_fake(ptr) free(ptr)
 #define realloc_dram(ptr,size) realloc(ptr,size)
 
 static int zmalloc_is_pmem(void * ptr) {
     (void)(ptr);
     return DRAM_LOCATION;
-}
-
-static void zfree_pmem(void *ptr) {
-    (void)(ptr);
-    zmalloc_pmem_not_available();
 }
 
 static void *zmalloc_pmem(size_t size) {
@@ -390,11 +387,21 @@ void zfree_dram(void *ptr) {
 }
 
 void zfree(void *ptr) {
-    if (!zmalloc_is_pmem(ptr)) {
-        zfree_dram(ptr);
-    } else {
-        zfree_pmem(ptr);
-    }
+#ifndef HAVE_MALLOC_SIZE
+    void *realptr;
+    size_t oldsize;
+#endif
+
+    if (ptr == NULL) return;
+#ifdef HAVE_MALLOC_SIZE
+    update_zmalloc_dram_stat_free(zmalloc_size(ptr));
+    free_fake(ptr);
+#else
+    realptr = (char*)ptr-PREFIX_SIZE;
+    oldsize = *((size_t*)realptr);
+    update_zmalloc_dram_stat_free(oldsize+PREFIX_SIZE);
+    free_fake(realptr);
+#endif
 }
 
 char *zstrdup(const char *s) {
