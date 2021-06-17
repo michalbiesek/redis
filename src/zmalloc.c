@@ -82,12 +82,14 @@ extern void* jemk_malloc(size_t size);
 extern void* jemk_calloc(size_t count, size_t size);
 extern void* jemk_realloc(void* ptr, size_t size);
 extern void jemk_free(void* ptr);
+extern void jemk_sfree(void *ptr, size_t size);
 
 #define malloc(size) jemk_malloc(size);
 #define calloc(count,size) jemk_calloc(count, size)
 #define realloc_dram(ptr,size) jemk_realloc(ptr,size)
 #define realloc_pmem(ptr,size) memkind_realloc(MEMKIND_DAX_KMEM,ptr,size)
 #define free_dram(ptr) jemk_free(ptr)
+#define free_dram_with_size(ptr, size) jemk_sfree(ptr, size)
 #define free_pmem(ptr) memkind_free(MEMKIND_DAX_KMEM,ptr)
 #endif
 
@@ -97,7 +99,7 @@ static void zmalloc_pmem_not_available(void) {
     fflush(stderr);
     abort();
 }
-#define free_dram(ptr) free(ptr)
+#define free_dram_with_size(ptr, size) free(ptr)
 #define realloc_dram(ptr,size) realloc(ptr,size)
 
 static int zmalloc_is_pmem(void * ptr) {
@@ -387,13 +389,14 @@ void zfree_dram(void *ptr) {
 
     if (ptr == NULL) return;
 #ifdef HAVE_MALLOC_SIZE
-    update_zmalloc_dram_stat_free(zmalloc_size(ptr));
-    free_dram(ptr);
+    size_t size = zmalloc_size(ptr);
+    update_zmalloc_dram_stat_free(size);
+    free_dram_with_size(ptr, size);
 #else
     realptr = (char*)ptr-PREFIX_SIZE;
     oldsize = *((size_t*)realptr);
     update_zmalloc_dram_stat_free(oldsize+PREFIX_SIZE);
-    free_dram(realptr);
+    free_dram_with_size(realptr, oldsize+PREFIX_SIZE);
 #endif
 }
 
