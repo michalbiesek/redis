@@ -623,8 +623,13 @@ int jemalloc_purge() {
     size_t sz = sizeof(unsigned);
     if (!jemk_mallctl("arenas.narenas", &narenas, &sz, NULL, 0)) {
         sprintf(tmp, "arena.%d.purge", narenas);
-        if (!jemk_mallctl(tmp, NULL, 0, NULL, 0))
+        if (jemk_mallctl(tmp, NULL, 0, NULL, 0)) {
+            return -1;
+        }
+        //try to purge pmem kind arena
+        if (!jemk_mallctl("arena.257.purge", NULL, 0, NULL, 0)) {
             return 0;
+        }
     }
     return -1;
 }
