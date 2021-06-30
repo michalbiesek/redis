@@ -616,7 +616,17 @@ void set_jemalloc_bg_thread(int enable) {
 }
 
 int jemalloc_purge() {
-    return 0;
+    extern int jemk_mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
+    /* return all unused (reserved) pages to the OS */
+    char tmp[32];
+    unsigned narenas = 0;
+    size_t sz = sizeof(unsigned);
+    if (!jemk_mallctl("arenas.narenas", &narenas, &sz, NULL, 0)) {
+        sprintf(tmp, "arena.%d.purge", narenas);
+        if (!jemk_mallctl(tmp, NULL, 0, NULL, 0))
+            return 0;
+    }
+    return -1;
 }
 
 #else

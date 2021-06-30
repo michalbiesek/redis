@@ -521,7 +521,7 @@ void flushAllDataAndResetRDB(int flags) {
         server.dirty = saved_dirty;
     }
     server.dirty++;
-#if defined(USE_JEMALLOC)
+#if defined(USE_JEMALLOC) || defined(USE_MEMKIND)
     /* jemalloc 5 doesn't release pages back to the OS when there's no traffic.
      * for large databases, flushdb blocks for long anyway, so a bit more won't
      * harm and this way the flush and purge will be synchroneus. */
@@ -539,7 +539,7 @@ void flushdbCommand(client *c) {
     if (getFlushCommandFlags(c,&flags) == C_ERR) return;
     server.dirty += emptyDb(c->db->id,flags,NULL);
     addReply(c,shared.ok);
-#if defined(USE_JEMALLOC)
+#if defined(USE_JEMALLOC) || defined(USE_MEMKIND)
     /* jemalloc 5 doesn't release pages back to the OS when there's no traffic.
      * for large databases, flushdb blocks for long anyway, so a bit more won't
      * harm and this way the flush and purge will be synchroneus. */
