@@ -454,6 +454,7 @@ int freeMemoryIfNeeded(void) {
     long long delta;
     int slaves = listLength(server.slaves);
     int result = C_ERR;
+    int eviction_loop_num = 0;
 
     /* When clients are paused the dataset should be static not just from the
      * POV of clients not being able to write, but also from the POV of
@@ -476,6 +477,8 @@ int freeMemoryIfNeeded(void) {
         redisDb *db;
         dict *dict;
         dictEntry *de;
+
+        if (eviction_loop_num >= 10) break;
 
         if (server.maxmemory_policy & (MAXMEMORY_FLAG_LRU|MAXMEMORY_FLAG_LFU) ||
             server.maxmemory_policy == MAXMEMORY_VOLATILE_TTL)
@@ -580,6 +583,8 @@ int freeMemoryIfNeeded(void) {
                 keyobj, db->id);
             decrRefCount(keyobj);
             keys_freed++;
+
+            eviction_loop_num++;
 
             /* When the memory to free starts to be big enough, we may
              * start spending so much time here that is impossible to

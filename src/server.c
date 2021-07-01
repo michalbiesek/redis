@@ -33,6 +33,7 @@
 #include "bio.h"
 #include "latency.h"
 #include "atomicvar.h"
+#include "zmalloc.h"
 
 #include <time.h>
 #include <signal.h>
@@ -5196,6 +5197,7 @@ int main(int argc, char **argv) {
 #endif
     setlocale(LC_COLLATE,"");
     tzset(); /* Populates 'timezone' global. */
+    zmalloc_init_pmem_kind();
     zmalloc_set_oom_handler(redisOutOfMemoryHandler);
     srand(time(NULL)^getpid());
     gettimeofday(&tv,NULL);

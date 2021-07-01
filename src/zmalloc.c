@@ -100,6 +100,10 @@ static void zmalloc_pmem_not_available(void) {
 #define free_dram(ptr) free(ptr)
 #define realloc_dram(ptr,size) realloc(ptr,size)
 
+void zmalloc_init_pmem_kind(void) {
+    return;
+}
+
 static int zmalloc_is_pmem(void * ptr) {
     (void)(ptr);
     return DRAM_LOCATION;
@@ -192,6 +196,14 @@ void *zmalloc_dram(size_t size) {
 }
 
 #ifdef USE_MEMKIND
+
+static memkind_t pmem_kind = NULL;
+
+void zmalloc_init_pmem_kind(void) {
+    memkind_create_pmem_with_mmap_file("/mnt/pmem/mct_pmem_file", 10200547328, &pmem_kind);
+    return;
+}
+
 static int zmalloc_is_pmem(void * ptr) {
     if (memory_variant == MEMORY_ONLY_DRAM) return DRAM_LOCATION;
     struct memkind *temp_kind = memkind_detect_kind(ptr);
@@ -221,8 +233,11 @@ static void zfree_pmem(void *ptr) {
 }
 
 static void *zmalloc_pmem(size_t size) {
-    void *ptr = memkind_malloc(MEMKIND_DAX_KMEM, size+PREFIX_SIZE);
-    if (!ptr && errno==ENOMEM) zmalloc_oom_handler(size);
+    void *ptr = memkind_malloc(pmem_kind, size+PREFIX_SIZE);
+    if (!ptr) {
+        /* when pmem is used up, auto switch to dram */
+        return zmalloc_dram(size);
+    }
 #ifdef HAVE_MALLOC_SIZE
     update_zmalloc_pmem_stat_alloc(zmalloc_size(ptr));
     return ptr;
@@ -234,9 +249,11 @@ static void *zmalloc_pmem(size_t size) {
 }
 
 static void *zcalloc_pmem(size_t size) {
-    void *ptr = memkind_calloc(MEMKIND_DAX_KMEM, 1, size+PREFIX_SIZE);
-
-    if (!ptr && errno==ENOMEM) zmalloc_oom_handler(size);
+    void *ptr = memkind_calloc(pmem_kind, 1, size+PREFIX_SIZE);
+    if (!ptr) {
+        /* when pmem is used up, auto switch to dram */
+        return zcalloc_dram(size); 
+    }
 #ifdef HAVE_MALLOC_SIZE
     update_zmalloc_pmem_stat_alloc(zmalloc_size(ptr));
     return ptr;
@@ -261,8 +278,14 @@ static void *zrealloc_pmem(void *ptr, size_t size) {
     if (ptr == NULL) return zmalloc(size);
 #ifdef HAVE_MALLOC_SIZE
     oldsize = zmalloc_size(ptr);
-    newptr = realloc_pmem(ptr,size);
-    if (!newptr) zmalloc_oom_handler(size);
+    newptr = memkind_realloc(pmem_kind, ptr, size);
+    if (!newptr) {
+        /* when pmem is used up, auto switch to dram */
+        newptr = zmalloc_dram(size);
+        memcpy(newptr, ptr, oldsize < size ? oldsize : size);
+        zfree_pmem(ptr);
+        return newptr;
+    }
 
     update_zmalloc_pmem_stat_free(oldsize);
     update_zmalloc_pmem_stat_alloc(zmalloc_size(newptr));
@@ -270,9 +293,16 @@ static void *zrealloc_pmem(void *ptr, size_t size) {
 #else
     realptr = (char*)ptr-PREFIX_SIZE;
     oldsize = *((size_t*)realptr);
-    newptr = realloc_pmem(realptr,size+PREFIX_SIZE);
-    if (!newptr) zmalloc_oom_handler(size);
-
+    newptr = memkind_realloc(pmem_kind, realptr, size+PREFIX_SIZE);
+    if (!newptr) {
+        /* when pmem is used up, auto switch to dram */ 
+        newptr = zmalloc_dram(size);
+        realnewptr = (char*)newptr - PREFIX_SIZE;
+        memcpy(realnewptr, realptr, oldsize < size ? oldsize+PREFIX_SIZE : size+PREFIX_SIZE);
+        *((size_t*)realnewptr) = size;
+        zfree_pmem(ptr);
+        return (char*)newptr;
+    }
     *((size_t*)newptr) = size;
     update_zmalloc_pmem_stat_free(oldsize+PREFIX_SIZE);
     update_zmalloc_pmem_stat_alloc(size+PREFIX_SIZE);
@@ -438,6 +468,16 @@ void zmalloc_set_pmem_mode(void) {
     memory_variant = MEMORY_DRAM_PMEM;
 }
 
+size_t zmalloc_get_rss(void) {
+#ifdef USE_MEMKIND
+    size_t total_resident = 0;
+    memkind_get_stat(NULL, MEMKIND_STAT_TYPE_RESIDENT, &total_resident);
+    return total_resident;
+#else
+    return zmalloc_get_rss_old();
+#endif
+} 
+
 /* Get the RSS information in an OS-specific way.
  *
  * WARNING: the function zmalloc_get_rss() is not designed to be fast
@@ -454,7 +494,7 @@ void zmalloc_set_pmem_mode(void) {
 #include <sys/stat.h>
 #include <fcntl.h>
 
-size_t zmalloc_get_rss(void) {
+size_t zmalloc_get_rss_old(void) {
     int page = sysconf(_SC_PAGESIZE);
     size_t rss;
     char buf[4096];
@@ -494,7 +534,7 @@ size_t zmalloc_get_rss(void) {
 #include <mach/task.h>
 #include <mach/mach_init.h>
 
-size_t zmalloc_get_rss(void) {
+size_t zmalloc_get_rss_old(void) {
     task_t task = MACH_PORT_NULL;
     struct task_basic_info t_info;
     mach_msg_type_number_t t_info_count = TASK_BASIC_INFO_COUNT;
@@ -511,7 +551,7 @@ size_t zmalloc_get_rss(void) {
 #include <sys/user.h>
 #include <unistd.h>
 
-size_t zmalloc_get_rss(void) {
+size_t zmalloc_get_rss_old(void) {
     struct kinfo_proc info;
     size_t infolen = sizeof(info);
     int mib[4];
@@ -530,7 +570,7 @@ size_t zmalloc_get_rss(void) {
 #include <sys/sysctl.h>
 #include <unistd.h>
 
-size_t zmalloc_get_rss(void) {
+size_t zmalloc_get_rss_old(void) {
     struct kinfo_proc2 info;
     size_t infolen = sizeof(info);
     int mib[6];
@@ -546,7 +586,7 @@ size_t zmalloc_get_rss(void) {
     return 0L;
 }
 #else
-size_t zmalloc_get_rss(void) {
+size_t zmalloc_get_rss_old(void) {
     /* If we can't get the RSS in an OS-specific way for this system just
      * return the memory usage we estimated in zmalloc()..
      *

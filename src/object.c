@@ -1430,9 +1430,9 @@ NULL
 
         freeMemoryOverheadData(mh);
     } else if (!strcasecmp(c->argv[1]->ptr,"malloc-stats") && c->argc == 2) {
-#if defined(USE_JEMALLOC)
+#if defined(USE_JEMALLOC) || defined (USE_MEMKIND)
         sds info = sdsempty();
-        je_malloc_stats_print(inputCatSds, &info, NULL);
+        jemk_malloc_stats_print(inputCatSds, &info, NULL);
         addReplyVerbatim(c,info,sdslen(info),"txt");
         sdsfree(info);
 #else

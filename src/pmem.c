@@ -71,12 +71,9 @@ void adjustPmemThresholdCycle(void) {
     /* Difference between target ratio and current ratio in last checkpoint*/
     static double ratio_diff_checkpoint;
     /* PMEM and DRAM utilization in last checkpoint*/
-    static size_t total_memory_checkpoint;
     size_t pmem_memory = zmalloc_used_pmem_memory();
     size_t dram_memory = zmalloc_used_dram_memory();
-    size_t total_memory_current = pmem_memory + dram_memory;
     // do not modify threshold when change in memory usage is too small
-    if (absDiff(total_memory_checkpoint, total_memory_current) > 100) {
         double current_ratio = (double)pmem_memory/dram_memory;
         double current_ratio_diff = fabs(current_ratio - server.target_pmem_dram_ratio);
         if (current_ratio_diff > 0.02) {
@@ -96,6 +93,4 @@ void adjustPmemThresholdCycle(void) {
             }
         }
         ratio_diff_checkpoint = current_ratio_diff;
-    }
-    total_memory_checkpoint = total_memory_current;
 }

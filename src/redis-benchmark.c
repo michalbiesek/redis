@@ -76,6 +76,7 @@ static struct config {
     int requests_finished;
     int keysize;
     int datasize;
+    int datasize_upper;
     int randomkeys;
     int randomkeys_keyspacelen;
     int keepalive;
@@ -1343,6 +1344,9 @@ int parseOptions(int argc, const char **argv) {
             config.datasize = atoi(argv[++i]);
             if (config.datasize < 1) config.datasize=1;
             if (config.datasize > 1024*1024*1024) config.datasize = 1024*1024*1024;
+        } else if (!strcmp(argv[i],"-u")) {
+            if (lastarg) goto invalid;
+            config.datasize_upper = atoi(argv[++i]);
         } else if (!strcmp(argv[i],"-P")) {
             if (lastarg) goto invalid;
             config.pipeline = atoi(argv[++i]);
@@ -1663,10 +1667,13 @@ int main(int argc, const char **argv) {
     }
 
     /* Run default benchmark suite. */
-    data = zmalloc(config.datasize+1);
+    int random_size = config.datasize_upper == config.datasize ? config.datasize : 
+        random() % (config.datasize_upper - config.datasize) + config.datasize;
+    printf("datasize is %d\n", random_size);
+    data = zmalloc(random_size+1);
     do {
-        genBenchmarkRandomData(data, config.datasize);
-        data[config.datasize] = '\0';
+        genBenchmarkRandomData(data, random_size);
+        data[random_size] = '\0';
 
         if (test_is_selected("ping_inline") || test_is_selected("ping"))
             benchmark("PING_INLINE","PING\r\n",6);
