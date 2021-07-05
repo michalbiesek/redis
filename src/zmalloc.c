@@ -198,9 +198,10 @@ void *zmalloc_dram(size_t size) {
 #ifdef USE_MEMKIND
 
 static memkind_t pmem_kind = NULL;
+#define PMEM_LIMIT 10200547328
 
 void zmalloc_init_pmem_kind(void) {
-    memkind_create_pmem_with_mmap_file("/mnt/pmem/mct_pmem_file", 10200547328, &pmem_kind);
+    memkind_create_pmem_with_mmap_file("/mnt/pmem/", 0, &pmem_kind);
     return;
 }
 
@@ -233,11 +234,9 @@ static void zfree_pmem(void *ptr) {
 }
 
 static void *zmalloc_pmem(size_t size) {
-    void *ptr = memkind_malloc(pmem_kind, size+PREFIX_SIZE);
-    if (!ptr) {
-        /* when pmem is used up, auto switch to dram */
+    if (zmalloc_used_pmem_memory()+size>PMEM_LIMIT)
         return zmalloc_dram(size);
-    }
+    void *ptr = memkind_malloc(pmem_kind, size+PREFIX_SIZE);
 #ifdef HAVE_MALLOC_SIZE
     update_zmalloc_pmem_stat_alloc(zmalloc_size(ptr));
     return ptr;
@@ -249,11 +248,9 @@ static void *zmalloc_pmem(size_t size) {
 }
 
 static void *zcalloc_pmem(size_t size) {
-    void *ptr = memkind_calloc(pmem_kind, 1, size+PREFIX_SIZE);
-    if (!ptr) {
-        /* when pmem is used up, auto switch to dram */
+    if (zmalloc_used_pmem_memory()+size>PMEM_LIMIT)
         return zcalloc_dram(size); 
-    }
+    void *ptr = memkind_calloc(pmem_kind, 1, size+PREFIX_SIZE);
 #ifdef HAVE_MALLOC_SIZE
     update_zmalloc_pmem_stat_alloc(zmalloc_size(ptr));
     return ptr;
@@ -278,14 +275,13 @@ static void *zrealloc_pmem(void *ptr, size_t size) {
     if (ptr == NULL) return zmalloc(size);
 #ifdef HAVE_MALLOC_SIZE
     oldsize = zmalloc_size(ptr);
-    newptr = memkind_realloc(pmem_kind, ptr, size);
-    if (!newptr) {
-        /* when pmem is used up, auto switch to dram */
+    if (zmalloc_used_pmem_memory()+size>PMEM_LIMIT) {
         newptr = zmalloc_dram(size);
         memcpy(newptr, ptr, oldsize < size ? oldsize : size);
         zfree_pmem(ptr);
         return newptr;
     }
+    newptr = memkind_realloc(pmem_kind, ptr, size);
 
     update_zmalloc_pmem_stat_free(oldsize);
     update_zmalloc_pmem_stat_alloc(zmalloc_size(newptr));
