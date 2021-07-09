@@ -4988,6 +4988,8 @@ int main(int argc, char **argv) {
             return crc64Test(argc, argv);
         } else if (!strcasecmp(argv[2], "zmalloc")) {
             return zmalloc_test(argc, argv);
+        } else if (!strcasecmp(argv[2], "pmem")) {
+            return zmalloc_pmem_test(argc, argv);
         }
 
         return -1; /* test not found */
