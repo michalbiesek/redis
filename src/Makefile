@@ -70,6 +70,10 @@ ifeq ($(USE_JEMALLOC),no)
 	MALLOC=libc
 endif
 
+ifeq ($(USE_MEMKIND),yes)
+	MALLOC=memkind
+endif
+
 # Override default settings if possible
 -include .make-settings
 
@@ -195,6 +199,20 @@ ifeq ($(BUILD_TLS),yes)
     FINAL_CFLAGS+=-DUSE_OPENSSL $(OPENSSL_CFLAGS)
     FINAL_LDFLAGS+=$(OPENSSL_LDFLAGS)
     FINAL_LIBS += ../deps/hiredis/libhiredis_ssl.a -lssl -lcrypto
+endif
+
+ifeq ($(MALLOC),memkind)
+	HAVE_DAXCTL := $(shell sh -c "(echo 'int main(void) { return 0; }') | $(CC) -x c - -ldaxctl 2>&1 && rm a.out && echo y")
+	ifeq ($(HAVE_DAXCTL), y)
+		DAXCTL_LIB = -ldaxctl
+	endif
+	HAVE_HWLOC := $(shell sh -c "(echo 'int main(void) { return 0; }') | $(CC) -x c - -lhwloc 2>&1 && rm a.out && echo y")
+	ifeq ($(HAVE_HWLOC), y)
+		HWLOC_LIB = -lhwloc
+	endif
+	DEPENDENCY_TARGETS+= memkind
+	FINAL_CFLAGS+= -DUSE_MEMKIND -I../deps/memkind/include
+	FINAL_LIBS+= ../deps/memkind/.libs/libmemkind.a $(DAXCTL_LIB) $(HWLOC_LIB) -lnuma -ldl
 endif
 
 REDIS_CC=$(QUIET_CC)$(CC) $(FINAL_CFLAGS)

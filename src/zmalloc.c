@@ -28,6 +28,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -69,6 +70,12 @@ void zlibc_free(void *ptr) {
 #define free(ptr) je_free(ptr)
 #define mallocx(size,flags) je_mallocx(size,flags)
 #define dallocx(ptr,flags) je_dallocx(ptr,flags)
+#elif defined(USE_MEMKIND)
+#include <errno.h>
+#define malloc(size) memkind_malloc(MEMKIND_DAX_KMEM_BALANCED,size)
+#define calloc(count,size) memkind_calloc(MEMKIND_DAX_KMEM_BALANCED,count,size)
+#define realloc(ptr,size) memkind_realloc(MEMKIND_DAX_KMEM_BALANCED,ptr,size)
+#define free(ptr) memkind_free(MEMKIND_DAX_KMEM_BALANCED,ptr)
 #endif
 
 #define update_zmalloc_stat_alloc(__n) do { \
@@ -98,7 +105,11 @@ static void (*zmalloc_oom_handler)(size_t) = zmalloc_default_oom;
 void *zmalloc(size_t size) {
     void *ptr = malloc(size+PREFIX_SIZE);
 
+#ifdef USE_MEMKIND
+    if (!ptr && errno==ENOMEM) zmalloc_oom_handler(size);
+#else
     if (!ptr) zmalloc_oom_handler(size);
+#endif
 #ifdef HAVE_MALLOC_SIZE
     update_zmalloc_stat_alloc(zmalloc_size(ptr));
     return ptr;
@@ -130,7 +141,11 @@ void zfree_no_tcache(void *ptr) {
 void *zcalloc(size_t size) {
     void *ptr = calloc(1, size+PREFIX_SIZE);
 
+#ifdef USE_MEMKIND
+    if (!ptr && errno==ENOMEM) zmalloc_oom_handler(size);
+#else
     if (!ptr) zmalloc_oom_handler(size);
+#endif
 #ifdef HAVE_MALLOC_SIZE
     update_zmalloc_stat_alloc(zmalloc_size(ptr));
     return ptr;
@@ -369,6 +384,25 @@ int jemalloc_purge() {
     return -1;
 }
 
+#elif defined(USE_MEMKIND)
+int zmalloc_get_allocator_info(size_t *allocated,
+                               size_t *active,
+                               size_t *resident) {
+    memkind_update_cached_stats();
+    memkind_get_stat(MEMKIND_DAX_KMEM_BALANCED, MEMKIND_STAT_TYPE_RESIDENT, resident);
+    memkind_get_stat(MEMKIND_DAX_KMEM_BALANCED, MEMKIND_STAT_TYPE_ACTIVE, active);
+    memkind_get_stat(MEMKIND_DAX_KMEM_BALANCED, MEMKIND_STAT_TYPE_ALLOCATED, allocated);
+    return 1;
+}
+
+void set_jemalloc_bg_thread(int enable) {
+    ((void)(enable));
+}
+
+int jemalloc_purge() {
+    return 0;
+}
+
 #else
 
 int zmalloc_get_allocator_info(size_t *allocated,
@@ -538,5 +572,23 @@ int zmalloc_test(int argc, char **argv) {
     zfree(ptr);
     printf("Freed pointer; used: %zu\n", zmalloc_used_memory());
     return 0;
+}
+
+int zmalloc_pmem_test(int argc, char **argv) {
+    void *ptr;
+
+    UNUSED(argc);
+    UNUSED(argv);
+#ifndef USE_MEMKIND
+    printf("ERROR! can't allocate Persistent Memory\n");
+    return 1;
+#else
+    ptr = malloc(123);
+    if (!ptr) {
+       printf("ERROR! can't allocate Persistent Memory\n");
+       return 1;
+    }
+    return 0;
+#endif
 }
 #endif
